@@ -1,9 +1,0 @@
-server:
-  port: 80
-
-spring:
-  application:
-    name: springboot-wxcloudrun
-
-gomoku:
-  board-size: 15
