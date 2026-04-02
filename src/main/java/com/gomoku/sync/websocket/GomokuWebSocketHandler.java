@@ -97,6 +97,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             handleMove(session, room, color, root);
         } else if ("RESET".equals(type)) {
             handleReset(session, room);
+        } else if ("UNDO_REQUEST".equals(type)) {
+            handleUndoRequest(session, room, color);
+        } else if ("UNDO_ACCEPT".equals(type)) {
+            handleUndoAccept(session, room, color);
+        } else if ("UNDO_REJECT".equals(type)) {
+            handleUndoReject(session, room, color);
+        } else if ("UNDO_CANCEL".equals(type)) {
+            handleUndoCancel(session, room, color);
         } else {
             sendToSession(session, error("未知消息类型: " + type));
         }
@@ -106,6 +114,42 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         int r = root.path("r").asInt(-1);
         int c = root.path("c").asInt(-1);
         String err = room.tryMove(color, r, c);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        broadcastState(room);
+    }
+
+    private void handleUndoRequest(WebSocketSession session, GameRoom room, int color) {
+        String err = room.requestUndo(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        broadcastState(room);
+    }
+
+    private void handleUndoAccept(WebSocketSession session, GameRoom room, int color) {
+        String err = room.acceptUndo(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        broadcastState(room);
+    }
+
+    private void handleUndoReject(WebSocketSession session, GameRoom room, int color) {
+        String err = room.rejectUndo(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        broadcastState(room);
+    }
+
+    private void handleUndoCancel(WebSocketSession session, GameRoom room, int color) {
+        String err = room.cancelUndoRequest(color);
         if (err != null) {
             sendToSession(session, error(err));
             return;
@@ -184,6 +228,12 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             n.put("yourColor", yourColor);
             n.put("blackConnected", room.getBlackSession() != null && room.getBlackSession().isOpen());
             n.put("whiteConnected", room.getWhiteSession() != null && room.getWhiteSession().isOpen());
+            n.put("undoPending", room.isUndoPending());
+            if (room.getPendingUndoRequesterColor() == null) {
+                n.putNull("undoRequesterColor");
+            } else {
+                n.put("undoRequesterColor", room.getPendingUndoRequesterColor());
+            }
             return new TextMessage(objectMapper.writeValueAsString(n));
         } catch (Exception e) {
             return new TextMessage("{\"type\":\"ERROR\",\"message\":\"序列化失败\"}");

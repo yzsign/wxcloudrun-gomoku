@@ -34,6 +34,11 @@ public class RoomService {
         return rooms.get(roomId);
     }
 
+    /** 从内存中移除房间（仅用于匹配取消等场景） */
+    public boolean removeRoomIfExists(String roomId) {
+        return rooms.remove(roomId) != null;
+    }
+
     /**
      * 加入房间，生成白方 token；若房间不存在或已有白方则失败
      */
