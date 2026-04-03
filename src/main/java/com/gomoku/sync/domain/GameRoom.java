@@ -208,6 +208,13 @@ public class GameRoom {
             if (color != current) {
                 return "须由对方回应";
             }
+            if (moveHistory.isEmpty()) {
+                return "没有可悔的棋";
+            }
+            RecordedMove last = moveHistory.peekLast();
+            if (last.color != pendingUndoRequesterColor) {
+                return "悔棋数据异常";
+            }
             applyUndoPops();
             pendingUndoRequesterColor = null;
             return null;
@@ -252,15 +259,13 @@ public class GameRoom {
         }
     }
 
+    /**
+     * 同意悔棋时只撤回申请方上一手（与 pendingUndoRequesterColor 一致），不移除对手棋子。
+     * 调用方须在持锁下保证 peekLast().color == pendingUndoRequesterColor。
+     */
     private void applyUndoPops() {
-        if (moveHistory.isEmpty()) {
-            return;
-        }
-        int pops = moveHistory.size() >= 2 ? 2 : 1;
-        for (int i = 0; i < pops && !moveHistory.isEmpty(); i++) {
-            RecordedMove m = moveHistory.removeLast();
-            board[m.r][m.c] = Stone.EMPTY;
-        }
+        RecordedMove m = moveHistory.removeLast();
+        board[m.r][m.c] = Stone.EMPTY;
         gameOver = false;
         winner = null;
         syncCurrentFromBoard();
