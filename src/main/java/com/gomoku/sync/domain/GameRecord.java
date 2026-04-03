@@ -1,0 +1,125 @@
+package com.gomoku.sync.domain;
+
+/**
+ * 对局归档 games 表
+ */
+public class GameRecord {
+
+    private Long id;
+    private String roomId;
+    private long blackUserId;
+    private long whiteUserId;
+    private int totalSteps;
+    private String outcome;
+    private Long runawayUserId;
+    private int blackEloBefore;
+    private int whiteEloBefore;
+    private int blackEloAfter;
+    private int whiteEloAfter;
+    private int blackEloDelta;
+    private int whiteEloDelta;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getRoomId() {
+        return roomId;
+    }
+
+    public void setRoomId(String roomId) {
+        this.roomId = roomId;
+    }
+
+    public long getBlackUserId() {
+        return blackUserId;
+    }
+
+    public void setBlackUserId(long blackUserId) {
+        this.blackUserId = blackUserId;
+    }
+
+    public long getWhiteUserId() {
+        return whiteUserId;
+    }
+
+    public void setWhiteUserId(long whiteUserId) {
+        this.whiteUserId = whiteUserId;
+    }
+
+    public int getTotalSteps() {
+        return totalSteps;
+    }
+
+    public void setTotalSteps(int totalSteps) {
+        this.totalSteps = totalSteps;
+    }
+
+    public String getOutcome() {
+        return outcome;
+    }
+
+    public void setOutcome(String outcome) {
+        this.outcome = outcome;
+    }
+
+    public Long getRunawayUserId() {
+        return runawayUserId;
+    }
+
+    public void setRunawayUserId(Long runawayUserId) {
+        this.runawayUserId = runawayUserId;
+    }
+
+    public int getBlackEloBefore() {
+        return blackEloBefore;
+    }
+
+    public void setBlackEloBefore(int blackEloBefore) {
+        this.blackEloBefore = blackEloBefore;
+    }
+
+    public int getWhiteEloBefore() {
+        return whiteEloBefore;
+    }
+
+    public void setWhiteEloBefore(int whiteEloBefore) {
+        this.whiteEloBefore = whiteEloBefore;
+    }
+
+    public int getBlackEloAfter() {
+        return blackEloAfter;
+    }
+
+    public void setBlackEloAfter(int blackEloAfter) {
+        this.blackEloAfter = blackEloAfter;
+    }
+
+    public int getWhiteEloAfter() {
+        return whiteEloAfter;
+    }
+
+    public void setWhiteEloAfter(int whiteEloAfter) {
+        this.whiteEloAfter = whiteEloAfter;
+    }
+
+    public int getBlackEloDelta() {
+        return blackEloDelta;
+    }
+
+    public void setBlackEloDelta(int blackEloDelta) {
+        this.blackEloDelta = blackEloDelta;
+    }
+
+    public int getWhiteEloDelta() {
+        return whiteEloDelta;
+    }
+
+    public void setWhiteEloDelta(int whiteEloDelta) {
+        this.whiteEloDelta = whiteEloDelta;
+    }
+}

@@ -16,10 +16,15 @@ public class SilentAuthService {
 
     private final WeChatMiniappClient weChatMiniappClient;
     private final UserMapper userMapper;
+    private final SessionJwtService sessionJwtService;
 
-    public SilentAuthService(WeChatMiniappClient weChatMiniappClient, UserMapper userMapper) {
+    public SilentAuthService(
+            WeChatMiniappClient weChatMiniappClient,
+            UserMapper userMapper,
+            SessionJwtService sessionJwtService) {
         this.weChatMiniappClient = weChatMiniappClient;
         this.userMapper = userMapper;
+        this.sessionJwtService = sessionJwtService;
     }
 
     public SilentLoginResponse silentLogin(SilentLoginRequest req) throws IOException {
@@ -42,7 +47,7 @@ public class SilentAuthService {
             u.setAvatarUrl(req.getAvatarUrl());
             u.setLastLoginAt(now);
             userMapper.insert(u);
-            return new SilentLoginResponse(u.getId());
+            return new SilentLoginResponse(u.getId(), sessionJwtService.createToken(u.getId()));
         }
 
         if (StringUtils.hasText(wx.getUnionid())) {
@@ -56,6 +61,6 @@ public class SilentAuthService {
         }
         existing.setLastLoginAt(now);
         userMapper.updateByOpenid(existing);
-        return new SilentLoginResponse(existing.getId());
+        return new SilentLoginResponse(existing.getId(), sessionJwtService.createToken(existing.getId()));
     }
 }

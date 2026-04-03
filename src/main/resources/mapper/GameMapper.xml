@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.GameMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO games (room_id, black_user_id, white_user_id, total_steps, outcome, runaway_user_id,
+                           black_elo_before, white_elo_before, black_elo_after, white_elo_after,
+                           black_elo_delta, white_elo_delta)
+        VALUES (#{roomId}, #{blackUserId}, #{whiteUserId}, #{totalSteps}, #{outcome}, #{runawayUserId,jdbcType=BIGINT},
+                #{blackEloBefore}, #{whiteEloBefore}, #{blackEloAfter}, #{whiteEloAfter},
+                #{blackEloDelta}, #{whiteEloDelta})
+    </insert>
+
+    <select id="countByRoomId" resultType="int">
+        SELECT COUNT(*) FROM games WHERE room_id = #{roomId}
+    </select>
+</mapper>

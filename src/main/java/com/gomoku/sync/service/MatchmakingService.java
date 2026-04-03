@@ -21,14 +21,14 @@ public class MatchmakingService {
         this.roomService = roomService;
     }
 
-    public RandomMatchResponse enter() {
+    public RandomMatchResponse enter(long userId) {
         synchronized (lock) {
             while (true) {
                 String roomId = waitingRoomIds.peekFirst();
                 if (roomId == null) {
                     break;
                 }
-                RoomService.JoinResult jr = roomService.joinRoom(roomId);
+                RoomService.JoinResult jr = roomService.joinRoom(roomId, userId);
                 if (jr.isOk()) {
                     waitingRoomIds.pollFirst();
                     GameRoom room = roomService.getRoom(roomId);
@@ -38,9 +38,9 @@ public class MatchmakingService {
                 if ("ROOM_NOT_FOUND".equals(jr.getError())) {
                     roomService.removeRoomIfExists(roomId);
                 }
-                // ROOM_FULL：房间已满，仅移出队列，不删房间
+                // ROOM_FULL / SAME_USER：移出队列，不删房间
             }
-            GameRoom room = roomService.createRoom();
+            GameRoom room = roomService.createRoom(userId);
             waitingRoomIds.addLast(room.getRoomId());
             return new RandomMatchResponse("host", room.getRoomId(), room.getBlackToken(), null, room.getSize());
         }
@@ -55,14 +55,14 @@ public class MatchmakingService {
     /**
      * 房主在超时或主动取消时调用：仅当尚无白方加入时可关闭房间。
      */
-    public CancelOutcome cancel(String roomId, String blackToken) {
+    public CancelOutcome cancel(String roomId, String blackToken, long blackUserId) {
         synchronized (lock) {
             GameRoom room = roomService.getRoom(roomId);
             if (room == null) {
                 waitingRoomIds.remove(roomId);
                 return CancelOutcome.NOT_FOUND_OR_BAD_TOKEN;
             }
-            if (!room.getBlackToken().equals(blackToken)) {
+            if (!room.getBlackToken().equals(blackToken) || room.getBlackUserId() != blackUserId) {
                 return CancelOutcome.NOT_FOUND_OR_BAD_TOKEN;
             }
             if (room.hasGuest()) {

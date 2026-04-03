@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.RoomParticipantMapper">
+
+    <resultMap id="RoomParticipantResult" type="com.gomoku.sync.domain.RoomParticipant">
+        <result property="roomId" column="room_id"/>
+        <result property="blackUserId" column="black_user_id"/>
+        <result property="whiteUserId" column="white_user_id"/>
+    </resultMap>
+
+    <insert id="insertBlack">
+        INSERT INTO room_participants (room_id, black_user_id)
+        VALUES (#{roomId}, #{blackUserId})
+    </insert>
+
+    <update id="updateWhite">
+        UPDATE room_participants
+        SET white_user_id = #{whiteUserId}
+        WHERE room_id = #{roomId}
+          AND white_user_id IS NULL
+    </update>
+
+    <select id="selectByRoomId" resultMap="RoomParticipantResult">
+        SELECT room_id, black_user_id, white_user_id
+        FROM room_participants
+        WHERE room_id = #{roomId}
+        LIMIT 1
+    </select>
+
+    <delete id="deleteByRoomId">
+        DELETE FROM room_participants WHERE room_id = #{roomId}
+    </delete>
+</mapper>

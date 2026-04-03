@@ -7,7 +7,13 @@ public interface UserMapper {
 
     User selectByOpenid(@Param("openid") String openid);
 
+    User selectById(@Param("id") long id);
+
+    User selectByIdForUpdate(@Param("id") long id);
+
     int insert(User user);
 
     int updateByOpenid(User user);
+
+    int updateRatingProfile(User user);
 }

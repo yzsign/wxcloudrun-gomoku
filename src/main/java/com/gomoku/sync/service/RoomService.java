@@ -1,6 +1,7 @@
 package com.gomoku.sync.service;
 
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.mapper.RoomParticipantMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -12,21 +13,31 @@ import java.util.concurrent.ConcurrentHashMap;
 public class RoomService {
 
     private final int boardSize;
+    private final RoomParticipantMapper roomParticipantMapper;
     private final Map<String, GameRoom> rooms = new ConcurrentHashMap<>();
 
-    public RoomService(@Value("${gomoku.board-size:15}") int boardSize) {
+    public RoomService(
+            @Value("${gomoku.board-size:15}") int boardSize,
+            RoomParticipantMapper roomParticipantMapper) {
         this.boardSize = boardSize;
+        this.roomParticipantMapper = roomParticipantMapper;
     }
 
     public int getBoardSize() {
         return boardSize;
     }
 
-    public GameRoom createRoom() {
+    public GameRoom createRoom(long blackUserId) {
         String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String blackToken = UUID.randomUUID().toString();
-        GameRoom room = new GameRoom(roomId, boardSize, blackToken);
+        GameRoom room = new GameRoom(roomId, boardSize, blackToken, blackUserId);
         rooms.put(roomId, room);
+        try {
+            roomParticipantMapper.insertBlack(roomId, blackUserId);
+        } catch (Exception e) {
+            rooms.remove(roomId);
+            throw new IllegalStateException("写入房间参与者失败", e);
+        }
         return room;
     }
 
@@ -36,13 +47,14 @@ public class RoomService {
 
     /** 从内存中移除房间（仅用于匹配取消等场景） */
     public boolean removeRoomIfExists(String roomId) {
+        roomParticipantMapper.deleteByRoomId(roomId);
         return rooms.remove(roomId) != null;
     }
 
     /**
      * 加入房间，生成白方 token；若房间不存在或已有白方则失败
      */
-    public JoinResult joinRoom(String roomId) {
+    public JoinResult joinRoom(String roomId, long whiteUserId) {
         GameRoom room = rooms.get(roomId);
         if (room == null) {
             return JoinResult.notFound();
@@ -51,8 +63,17 @@ public class RoomService {
             if (room.hasGuest()) {
                 return JoinResult.full();
             }
+            if (room.getBlackUserId() == whiteUserId) {
+                return JoinResult.sameUser();
+            }
             String whiteToken = UUID.randomUUID().toString();
             room.setWhiteToken(whiteToken);
+            room.setWhiteUserId(whiteUserId);
+            if (roomParticipantMapper.updateWhite(roomId, whiteUserId) != 1) {
+                room.setWhiteToken(null);
+                room.setWhiteUserId(null);
+                return JoinResult.notFound();
+            }
             return JoinResult.ok(whiteToken);
         }
     }
@@ -78,6 +99,10 @@ public class RoomService {
 
         public static JoinResult full() {
             return new JoinResult(false, null, "ROOM_FULL");
+        }
+
+        public static JoinResult sameUser() {
+            return new JoinResult(false, null, "SAME_USER");
         }
 
         public boolean isOk() {

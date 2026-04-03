@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.service.RoomService;
+import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -16,6 +17,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 public class GomokuWebSocketHandler extends TextWebSocketHandler {
@@ -25,10 +27,15 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private final RoomService roomService;
     private final ObjectMapper objectMapper;
+    private final SessionJwtService sessionJwtService;
 
-    public GomokuWebSocketHandler(RoomService roomService, ObjectMapper objectMapper) {
+    public GomokuWebSocketHandler(
+            RoomService roomService,
+            ObjectMapper objectMapper,
+            SessionJwtService sessionJwtService) {
         this.roomService = roomService;
         this.objectMapper = objectMapper;
+        this.sessionJwtService = sessionJwtService;
     }
 
     @Override
@@ -41,8 +48,20 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         Map<String, List<String>> params = UriComponentsBuilder.fromUri(uri).build().getQueryParams();
         String roomId = first(params.get("roomId"));
         String token = first(params.get("token"));
+        String sessionToken = first(params.get("sessionToken"));
         if (roomId == null || token == null) {
             sendError(session, "缺少 roomId 或 token");
+            session.close(CloseStatus.BAD_DATA);
+            return;
+        }
+        if (sessionToken == null || sessionToken.isEmpty()) {
+            sendError(session, "缺少 sessionToken");
+            session.close(CloseStatus.BAD_DATA);
+            return;
+        }
+        Optional<Long> userId = sessionJwtService.parseUserId(sessionToken);
+        if (!userId.isPresent()) {
+            sendError(session, "会话无效或已过期，请重新登录");
             session.close(CloseStatus.BAD_DATA);
             return;
         }
@@ -55,6 +74,12 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         Integer color = room.resolveColorByToken(token);
         if (color == null) {
             sendError(session, "token 无效");
+            session.close(CloseStatus.BAD_DATA);
+            return;
+        }
+        long seatUserId = color == Stone.BLACK ? room.getBlackUserId() : room.getWhiteUserId() == null ? -1L : room.getWhiteUserId();
+        if (seatUserId != userId.get()) {
+            sendError(session, "用户与座位不匹配");
             session.close(CloseStatus.BAD_DATA);
             return;
         }
@@ -162,6 +187,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         room.getLock().lock();
         try {
             if (!room.isGameOver()) {
+                // 对方已 reset、本端结算未关时：房间已是新局，重复 RESET 视为同步状态
+                if (room.isBoardEmpty()) {
+                    broadcastState(room);
+                    return;
+                }
                 sendToSession(session, error("对局未结束，不能重置"));
                 return;
             }

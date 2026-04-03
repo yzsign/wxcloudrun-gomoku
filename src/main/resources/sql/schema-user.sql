@@ -1,14 +1,31 @@
--- 微信小游戏用户表：openid 由 jscode2session 换取（表名用 users，避免与保留字 user 冲突）
+-- 微信小游戏用户表 + rule.md 天梯与统计字段（新库一键建表）
 CREATE TABLE IF NOT EXISTS `users` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `openid` VARCHAR(64) NOT NULL,
   `unionid` VARCHAR(64) DEFAULT NULL,
   `nickname` VARCHAR(64) DEFAULT NULL,
   `avatar_url` VARCHAR(512) DEFAULT NULL,
+  `elo_score` INT NOT NULL DEFAULT 1200 COMMENT '天梯分',
+  `activity_points` INT NOT NULL DEFAULT 0,
+  `consecutive_wins` INT NOT NULL DEFAULT 0,
+  `consecutive_losses` INT NOT NULL DEFAULT 0,
+  `today_net_change` INT NOT NULL DEFAULT 0,
+  `elo_carry_over` INT NOT NULL DEFAULT 0 COMMENT '单日净变动溢出，次日并入 elo_score',
+  `last_rating_reset_date` DATE DEFAULT NULL,
+  `runaway_count` INT NOT NULL DEFAULT 0,
+  `total_games` INT NOT NULL DEFAULT 0,
+  `win_count` INT NOT NULL DEFAULT 0,
+  `draw_count` INT NOT NULL DEFAULT 0,
+  `season_end_score` INT DEFAULT NULL,
+  `placement_fair_games` INT NOT NULL DEFAULT 0 COMMENT '无逃跑完成局数（定级）',
+  `newbie_match_games` INT NOT NULL DEFAULT 0 COMMENT '§6.3 已结算局数',
+  `newbie_runaway_tally` INT NOT NULL DEFAULT 0 COMMENT '保护期内作逃跑方次数',
+  `low_trust` TINYINT(1) NOT NULL DEFAULT 0,
   `last_login_at` DATETIME(3) DEFAULT NULL,
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_openid` (`openid`),
-  KEY `idx_unionid` (`unionid`)
+  KEY `idx_unionid` (`unionid`),
+  KEY `idx_elo_score` (`elo_score`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

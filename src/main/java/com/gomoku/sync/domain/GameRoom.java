@@ -7,14 +7,16 @@ import java.util.Deque;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 单房间状态：棋盘、轮次、双方 token 与连接
+ * 单房间状态：棋盘、轮次、双方 token、真实用户 id 与连接
  */
 public class GameRoom {
 
     private final String roomId;
     private final int size;
     private final String blackToken;
+    private final long blackUserId;
     private String whiteToken;
+    private Long whiteUserId;
     private final int[][] board;
     private int current = Stone.BLACK;
     private boolean gameOver;
@@ -29,11 +31,25 @@ public class GameRoom {
     /** 非空表示有待对方处理的悔棋申请（申请方为上一手行棋方） */
     private Integer pendingUndoRequesterColor;
 
-    public GameRoom(String roomId, int size, String blackToken) {
+    public GameRoom(String roomId, int size, String blackToken, long blackUserId) {
         this.roomId = roomId;
         this.size = size;
         this.blackToken = blackToken;
+        this.blackUserId = blackUserId;
         this.board = new int[size][size];
+    }
+
+    public long getBlackUserId() {
+        return blackUserId;
+    }
+
+    public Long getWhiteUserId() {
+        lock.lock();
+        try {
+            return whiteUserId;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public String getRoomId() {
@@ -54,6 +70,10 @@ public class GameRoom {
 
     public void setWhiteToken(String whiteToken) {
         this.whiteToken = whiteToken;
+    }
+
+    public void setWhiteUserId(Long whiteUserId) {
+        this.whiteUserId = whiteUserId;
     }
 
     public boolean hasGuest() {
@@ -158,6 +178,16 @@ public class GameRoom {
             }
         }
         return n;
+    }
+
+    /** 棋盘是否无子（新局未下或已 reset） */
+    public boolean isBoardEmpty() {
+        lock.lock();
+        try {
+            return countStones() == 0;
+        } finally {
+            lock.unlock();
+        }
     }
 
     private void syncCurrentFromBoard() {

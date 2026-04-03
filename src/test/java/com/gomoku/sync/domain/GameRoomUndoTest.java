@@ -11,8 +11,9 @@ class GameRoomUndoTest {
 
     @Test
     void acceptUndoRemovesOnlyRequesterLastStone() {
-        GameRoom room = new GameRoom("r1", 15, "bt");
+        GameRoom room = new GameRoom("r1", 15, "bt", 1L);
         room.setWhiteToken("wt");
+        room.setWhiteUserId(2L);
 
         assertNull(room.tryMove(Stone.BLACK, 7, 7));
         assertNull(room.tryMove(Stone.WHITE, 7, 8));
@@ -27,8 +28,9 @@ class GameRoomUndoTest {
 
     @Test
     void acceptUndoAfterSeveralMovesRemovesOnlyOneStone() {
-        GameRoom room = new GameRoom("r2", 15, "bt");
+        GameRoom room = new GameRoom("r2", 15, "bt", 1L);
         room.setWhiteToken("wt");
+        room.setWhiteUserId(2L);
 
         assertNull(room.tryMove(Stone.BLACK, 7, 7));
         assertNull(room.tryMove(Stone.WHITE, 7, 8));

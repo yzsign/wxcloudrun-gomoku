@@ -9,16 +9,56 @@
         <result property="unionid" column="unionid"/>
         <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar_url"/>
+        <result property="eloScore" column="elo_score"/>
+        <result property="activityPoints" column="activity_points"/>
+        <result property="consecutiveWins" column="consecutive_wins"/>
+        <result property="consecutiveLosses" column="consecutive_losses"/>
+        <result property="todayNetChange" column="today_net_change"/>
+        <result property="eloCarryOver" column="elo_carry_over"/>
+        <result property="lastRatingResetDate" column="last_rating_reset_date"/>
+        <result property="runawayCount" column="runaway_count"/>
+        <result property="totalGames" column="total_games"/>
+        <result property="winCount" column="win_count"/>
+        <result property="drawCount" column="draw_count"/>
+        <result property="seasonEndScore" column="season_end_score"/>
+        <result property="placementFairGames" column="placement_fair_games"/>
+        <result property="newbieMatchGames" column="newbie_match_games"/>
+        <result property="newbieRunawayTally" column="newbie_runaway_tally"/>
+        <result property="lowTrust" column="low_trust"/>
         <result property="lastLoginAt" column="last_login_at"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
+    <sql id="UserColumns">
+        id, openid, unionid, nickname, avatar_url,
+        elo_score, activity_points, consecutive_wins, consecutive_losses,
+        today_net_change, elo_carry_over, last_rating_reset_date,
+        runaway_count, total_games, win_count, draw_count, season_end_score,
+        placement_fair_games, newbie_match_games, newbie_runaway_tally, low_trust,
+        last_login_at, created_at, updated_at
+    </sql>
+
     <select id="selectByOpenid" resultMap="UserResult">
-        SELECT id, openid, unionid, nickname, avatar_url, last_login_at, created_at, updated_at
+        SELECT <include refid="UserColumns"/>
         FROM users
         WHERE openid = #{openid}
         LIMIT 1
+    </select>
+
+    <select id="selectById" resultMap="UserResult">
+        SELECT <include refid="UserColumns"/>
+        FROM users
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectByIdForUpdate" resultMap="UserResult">
+        SELECT <include refid="UserColumns"/>
+        FROM users
+        WHERE id = #{id}
+        LIMIT 1
+        FOR UPDATE
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
@@ -33,5 +73,26 @@
             avatar_url = #{avatarUrl},
             last_login_at = #{lastLoginAt}
         WHERE openid = #{openid}
+    </update>
+
+    <update id="updateRatingProfile">
+        UPDATE users
+        SET elo_score = #{eloScore},
+            activity_points = #{activityPoints},
+            consecutive_wins = #{consecutiveWins},
+            consecutive_losses = #{consecutiveLosses},
+            today_net_change = #{todayNetChange},
+            elo_carry_over = #{eloCarryOver},
+            last_rating_reset_date = #{lastRatingResetDate,jdbcType=DATE},
+            runaway_count = #{runawayCount},
+            total_games = #{totalGames},
+            win_count = #{winCount},
+            draw_count = #{drawCount},
+            season_end_score = #{seasonEndScore,jdbcType=INTEGER},
+            placement_fair_games = #{placementFairGames},
+            newbie_match_games = #{newbieMatchGames},
+            newbie_runaway_tally = #{newbieRunawayTally},
+            low_trust = #{lowTrust}
+        WHERE id = #{id}
     </update>
 </mapper>
