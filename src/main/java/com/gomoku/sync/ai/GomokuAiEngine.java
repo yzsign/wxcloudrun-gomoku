@@ -6,6 +6,7 @@ import com.gomoku.sync.domain.WinChecker;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 五子棋人机落子（与前端 gomoku.js 思路接近：必胜/必堵 + 候选裁剪 + minimax）。
@@ -13,15 +14,38 @@ import java.util.List;
 public final class GomokuAiEngine {
 
     private static final int[][] DIRS = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
-    private static final int SEARCH_DEPTH = 4;
+    private static final int DEFAULT_SEARCH_DEPTH = 4;
+    /** 随机匹配人机：每步搜索深度下界（含） */
+    private static final int RANDOM_MATCH_BOT_DEPTH_MIN = 2;
+    /** 随机匹配人机：每步搜索深度上界（含） */
+    private static final int RANDOM_MATCH_BOT_DEPTH_MAX = 4;
     private static final int MAX_CANDIDATES = 32;
 
     private GomokuAiEngine() {}
 
     /**
+     * 随机匹配白方人机：每步在 [{@value #RANDOM_MATCH_BOT_DEPTH_MIN}, {@value #RANDOM_MATCH_BOT_DEPTH_MAX}] 间随机搜索深度，
+     * 强弱与耗时均有波动（必胜/必堵仍优先）。
+     */
+    public static int nextRandomMatchBotSearchDepth() {
+        return ThreadLocalRandom.current()
+                .nextInt(RANDOM_MATCH_BOT_DEPTH_MIN, RANDOM_MATCH_BOT_DEPTH_MAX + 1);
+    }
+
+    /**
      * @return 长度 2 的数组 [r, c]，不应返回 null（极端情况落中心空位）
      */
     public static int[] chooseMove(int[][] board, int size, int aiColor) {
+        return chooseMove(board, size, aiColor, DEFAULT_SEARCH_DEPTH);
+    }
+
+    /**
+     * @param searchDepth 极小搜索层数（≥1），越大越强但越慢；随机匹配人机每步可用 {@link #nextRandomMatchBotSearchDepth()}
+     */
+    public static int[] chooseMove(int[][] board, int size, int aiColor, int searchDepth) {
+        if (searchDepth < 1) {
+            searchDepth = 1;
+        }
         int opp = opposite(aiColor);
         int stones = countStones(board, size);
         if (stones == 0) {
@@ -65,7 +89,16 @@ public final class GomokuAiEngine {
                 board[r][c] = Stone.EMPTY;
                 return new int[]{r, c};
             }
-            sc = minimax(board, size, SEARCH_DEPTH - 1, false, aiColor, opp, Integer.MIN_VALUE, Integer.MAX_VALUE);
+            sc = minimax(
+                    board,
+                    size,
+                    searchDepth - 1,
+                    false,
+                    aiColor,
+                    opp,
+                    Integer.MIN_VALUE,
+                    Integer.MAX_VALUE,
+                    searchDepth);
             board[r][c] = Stone.EMPTY;
             if (sc > bestScore) {
                 bestScore = sc;
@@ -84,7 +117,8 @@ public final class GomokuAiEngine {
             int aiColor,
             int opp,
             int alpha,
-            int beta) {
+            int beta,
+            int searchDepth) {
         if (depth == 0) {
             return evaluate(board, size, aiColor);
         }
@@ -111,11 +145,11 @@ public final class GomokuAiEngine {
                 board[r][c] = turn;
                 int ev;
                 if (WinChecker.checkWin(board, size, r, c, turn)) {
-                    ev = 2_000_000 - (SEARCH_DEPTH - depth);
+                    ev = 2_000_000 - (searchDepth - depth);
                 } else if (WinChecker.boardFull(board, size)) {
                     ev = 0;
                 } else {
-                    ev = minimax(board, size, depth - 1, false, aiColor, opp, alpha, beta);
+                    ev = minimax(board, size, depth - 1, false, aiColor, opp, alpha, beta, searchDepth);
                 }
                 board[r][c] = Stone.EMPTY;
                 maxEval = Math.max(maxEval, ev);
@@ -136,11 +170,11 @@ public final class GomokuAiEngine {
             board[r][c] = turn;
             int ev;
             if (WinChecker.checkWin(board, size, r, c, turn)) {
-                ev = -2_000_000 + (SEARCH_DEPTH - depth);
+                ev = -2_000_000 + (searchDepth - depth);
             } else if (WinChecker.boardFull(board, size)) {
                 ev = 0;
             } else {
-                ev = minimax(board, size, depth - 1, true, aiColor, opp, alpha, beta);
+                ev = minimax(board, size, depth - 1, true, aiColor, opp, alpha, beta, searchDepth);
             }
             board[r][c] = Stone.EMPTY;
             minEval = Math.min(minEval, ev);
