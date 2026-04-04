@@ -17,6 +17,8 @@ public class GameRoom {
     private final long blackUserId;
     private String whiteToken;
     private Long whiteUserId;
+    /** 随机匹配超时接入的数据库人机：无 WebSocket，由服务端代下白棋 */
+    private boolean whiteIsBot;
     private final int[][] board;
     private int current = Stone.BLACK;
     private boolean gameOver;
@@ -74,6 +76,14 @@ public class GameRoom {
 
     public void setWhiteUserId(Long whiteUserId) {
         this.whiteUserId = whiteUserId;
+    }
+
+    public boolean isWhiteIsBot() {
+        return whiteIsBot;
+    }
+
+    public void setWhiteIsBot(boolean whiteIsBot) {
+        this.whiteIsBot = whiteIsBot;
     }
 
     public boolean hasGuest() {

@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS `users` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `openid` VARCHAR(64) NOT NULL,
+  `is_bot` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=人机账号',
   `unionid` VARCHAR(64) DEFAULT NULL,
   `nickname` VARCHAR(64) DEFAULT NULL,
   `avatar_url` VARCHAR(512) DEFAULT NULL,
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_openid` (`openid`),
+  KEY `idx_is_bot` (`is_bot`),
   KEY `idx_unionid` (`unionid`),
   KEY `idx_elo_score` (`elo_score`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -14,8 +14,10 @@ public class UserRatingResponse {
     private final boolean lowTrust;
     private final int placementFairGames;
     private final int newbieMatchGames;
-    /** 可选：对手公开资料（仅对手战绩接口会填） */
+    /** 可选：昵称（对手接口或本人接口均可填） */
     private final String nickname;
+    /** 可选：头像 URL（与 users.avatar_url 一致，需下载域名白名单） */
+    private final String avatarUrl;
 
     public UserRatingResponse(
             long userId,
@@ -43,6 +45,7 @@ public class UserRatingResponse {
                 lowTrust,
                 placementFairGames,
                 newbieMatchGames,
+                null,
                 null);
     }
 
@@ -59,7 +62,8 @@ public class UserRatingResponse {
             boolean lowTrust,
             int placementFairGames,
             int newbieMatchGames,
-            String nickname) {
+            String nickname,
+            String avatarUrl) {
         this.userId = userId;
         this.eloScore = eloScore;
         this.activityPoints = activityPoints;
@@ -73,6 +77,7 @@ public class UserRatingResponse {
         this.placementFairGames = placementFairGames;
         this.newbieMatchGames = newbieMatchGames;
         this.nickname = nickname;
+        this.avatarUrl = avatarUrl;
     }
 
     public long getUserId() {
@@ -125,5 +130,9 @@ public class UserRatingResponse {
 
     public String getNickname() {
         return nickname;
+    }
+
+    public String getAvatarUrl() {
+        return avatarUrl;
     }
 }

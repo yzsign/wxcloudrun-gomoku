@@ -10,6 +10,7 @@ public class User {
 
     private Long id;
     private String openid;
+    private boolean bot;
     private String unionid;
     private String nickname;
     private String avatarUrl;
@@ -47,6 +48,14 @@ public class User {
 
     public void setOpenid(String openid) {
         this.openid = openid;
+    }
+
+    public boolean isBot() {
+        return bot;
+    }
+
+    public void setBot(boolean bot) {
+        this.bot = bot;
     }
 
     public String getUnionid() {

@@ -38,6 +38,8 @@ public class UserRatingController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ApiError("NOT_FOUND", "用户不存在"));
         }
+        String nick = u.getNickname();
+        String av = u.getAvatarUrl();
         UserRatingResponse body = new UserRatingResponse(
                 u.getId().longValue(),
                 u.getEloScore(),
@@ -50,7 +52,9 @@ public class UserRatingController {
                 u.getRunawayCount(),
                 u.isLowTrust(),
                 u.getPlacementFairGames(),
-                u.getNewbieMatchGames());
+                u.getNewbieMatchGames(),
+                nick != null && !nick.isEmpty() ? nick : null,
+                av != null && !av.isEmpty() ? av : null);
         return ResponseEntity.ok(body);
     }
 }

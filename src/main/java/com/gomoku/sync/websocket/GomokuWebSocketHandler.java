@@ -3,6 +3,7 @@ package com.gomoku.sync.websocket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.service.RoomService;
@@ -106,6 +107,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
 
         broadcastState(room);
+        maybePlayBot(room);
     }
 
     @Override
@@ -144,6 +146,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         broadcastState(room);
+        maybePlayBot(room);
     }
 
     private void handleUndoRequest(WebSocketSession session, GameRoom room, int color) {
@@ -152,7 +155,18 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             sendToSession(session, error(err));
             return;
         }
+        if (room.isWhiteIsBot()
+                && room.isUndoPending()
+                && room.getPendingUndoRequesterColor() != null
+                && room.getPendingUndoRequesterColor() == Stone.BLACK) {
+            String err2 = room.acceptUndo(Stone.WHITE);
+            if (err2 != null) {
+                broadcastState(room);
+                return;
+            }
+        }
         broadcastState(room);
+        maybePlayBot(room);
     }
 
     private void handleUndoAccept(WebSocketSession session, GameRoom room, int color) {
@@ -162,6 +176,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         broadcastState(room);
+        maybePlayBot(room);
     }
 
     private void handleUndoReject(WebSocketSession session, GameRoom room, int color) {
@@ -171,6 +186,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         broadcastState(room);
+        maybePlayBot(room);
     }
 
     private void handleUndoCancel(WebSocketSession session, GameRoom room, int color) {
@@ -180,6 +196,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         broadcastState(room);
+        maybePlayBot(room);
     }
 
     /** 对局结束后任一方可申请重新开始（同房间） */
@@ -200,6 +217,31 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             room.getLock().unlock();
         }
         broadcastState(room);
+        maybePlayBot(room);
+    }
+
+    /**
+     * 白方为数据库人机时：轮到白且非悔棋待定时代为落子。
+     */
+    private void maybePlayBot(GameRoom room) {
+        if (!room.isWhiteIsBot() || room.isGameOver()) {
+            return;
+        }
+        if (room.isUndoPending()) {
+            return;
+        }
+        if (room.getCurrent() != Stone.WHITE) {
+            return;
+        }
+        int[][] copy = room.getBoardCopy();
+        int size = room.getSize();
+        int[] mv = GomokuAiEngine.chooseMove(copy, size, Stone.WHITE);
+        String err = room.tryMove(Stone.WHITE, mv[0], mv[1]);
+        if (err != null) {
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
     }
 
     @Override
@@ -257,7 +299,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             }
             n.put("yourColor", yourColor);
             n.put("blackConnected", room.getBlackSession() != null && room.getBlackSession().isOpen());
-            n.put("whiteConnected", room.getWhiteSession() != null && room.getWhiteSession().isOpen());
+            boolean whiteHere =
+                    room.isWhiteIsBot()
+                            || (room.getWhiteSession() != null && room.getWhiteSession().isOpen());
+            n.put("whiteConnected", whiteHere);
+            n.put("whiteIsBot", room.isWhiteIsBot());
             n.put("undoPending", room.isUndoPending());
             if (room.getPendingUndoRequesterColor() == null) {
                 n.putNull("undoRequesterColor");

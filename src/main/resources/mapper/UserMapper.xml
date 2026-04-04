@@ -6,6 +6,7 @@
     <resultMap id="UserResult" type="com.gomoku.sync.domain.User">
         <id property="id" column="id"/>
         <result property="openid" column="openid"/>
+        <result property="bot" column="is_bot"/>
         <result property="unionid" column="unionid"/>
         <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar_url"/>
@@ -31,7 +32,7 @@
     </resultMap>
 
     <sql id="UserColumns">
-        id, openid, unionid, nickname, avatar_url,
+        id, openid, is_bot, unionid, nickname, avatar_url,
         elo_score, activity_points, consecutive_wins, consecutive_losses,
         today_net_change, elo_carry_over, last_rating_reset_date,
         runaway_count, total_games, win_count, draw_count, season_end_score,
@@ -74,6 +75,10 @@
             last_login_at = #{lastLoginAt}
         WHERE openid = #{openid}
     </update>
+
+    <select id="selectRandomBotId" resultType="java.lang.Long">
+        SELECT id FROM users WHERE is_bot = 1 ORDER BY RAND() LIMIT 1
+    </select>
 
     <update id="updateRatingProfile">
         UPDATE users

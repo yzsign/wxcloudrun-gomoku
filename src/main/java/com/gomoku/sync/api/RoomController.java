@@ -143,6 +143,7 @@ public class RoomController {
                     .body(new ApiError("NOT_FOUND", "对手用户不存在"));
         }
         String nick = u.getNickname();
+        String av = u.getAvatarUrl();
         UserRatingResponse body = new UserRatingResponse(
                 u.getId().longValue(),
                 u.getEloScore(),
@@ -156,7 +157,8 @@ public class RoomController {
                 u.isLowTrust(),
                 u.getPlacementFairGames(),
                 u.getNewbieMatchGames(),
-                nick != null && !nick.isEmpty() ? nick : null);
+                nick != null && !nick.isEmpty() ? nick : null,
+                av != null && !av.isEmpty() ? av : null);
         return ResponseEntity.ok(body);
     }
 }

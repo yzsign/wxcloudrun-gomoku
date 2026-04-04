@@ -2,6 +2,7 @@ package com.gomoku.sync.service;
 
 import com.gomoku.sync.api.dto.RandomMatchResponse;
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
@@ -14,11 +15,13 @@ import java.util.Deque;
 public class MatchmakingService {
 
     private final RoomService roomService;
+    private final UserMapper userMapper;
     private final Deque<String> waitingRoomIds = new ArrayDeque<>();
     private final Object lock = new Object();
 
-    public MatchmakingService(RoomService roomService) {
+    public MatchmakingService(RoomService roomService, UserMapper userMapper) {
         this.roomService = roomService;
+        this.userMapper = userMapper;
     }
 
     public RandomMatchResponse enter(long userId) {
@@ -71,6 +74,49 @@ public class MatchmakingService {
             waitingRoomIds.remove(roomId);
             roomService.removeRoomIfExists(roomId);
             return CancelOutcome.OK;
+        }
+    }
+
+    public enum FallbackBotOutcome {
+        /** 已从 users 中随机人机入座白方 */
+        OK,
+        ROOM_NOT_FOUND,
+        BAD_TOKEN,
+        HAS_GUEST,
+        NO_BOTS
+    }
+
+    /**
+     * 匹配超时：从数据库随机一名人机加入房间（白方），房主仍为黑方。
+     */
+    public FallbackBotOutcome assignRandomBot(String roomId, String blackToken, long blackUserId) {
+        synchronized (lock) {
+            GameRoom room = roomService.getRoom(roomId);
+            if (room == null) {
+                waitingRoomIds.remove(roomId);
+                return FallbackBotOutcome.ROOM_NOT_FOUND;
+            }
+            if (!room.getBlackToken().equals(blackToken) || room.getBlackUserId() != blackUserId) {
+                return FallbackBotOutcome.BAD_TOKEN;
+            }
+            if (room.hasGuest()) {
+                return FallbackBotOutcome.HAS_GUEST;
+            }
+            Long botId = userMapper.selectRandomBotId();
+            if (botId == null) {
+                return FallbackBotOutcome.NO_BOTS;
+            }
+            waitingRoomIds.remove(roomId);
+            RoomService.JoinResult jr = roomService.joinRoom(roomId, botId);
+            if (!jr.isOk()) {
+                waitingRoomIds.addLast(roomId);
+                if ("ROOM_NOT_FOUND".equals(jr.getError())) {
+                    roomService.removeRoomIfExists(roomId);
+                }
+                return FallbackBotOutcome.ROOM_NOT_FOUND;
+            }
+            room.setWhiteIsBot(true);
+            return FallbackBotOutcome.OK;
         }
     }
 }

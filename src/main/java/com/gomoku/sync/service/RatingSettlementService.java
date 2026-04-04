@@ -104,6 +104,10 @@ public class RatingSettlementService {
         User black = blackId == idLo ? uLo : uHi;
         User white = blackId == idLo ? uHi : uLo;
 
+        if (white.isBot() && callerUserId != blackId) {
+            throw new IllegalArgumentException("人机对局仅执黑方人类玩家可提交结算");
+        }
+
         DailyEloCap.rolloverIfNeeded(black, today);
         DailyEloCap.rolloverIfNeeded(white, today);
 
