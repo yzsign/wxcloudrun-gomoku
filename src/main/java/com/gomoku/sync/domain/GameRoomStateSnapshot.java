@@ -18,6 +18,8 @@ public class GameRoomStateSnapshot {
     private int matchRound;
     private List<MoveRecord> moves;
     private Integer pendingUndoRequesterColor;
+    /** 0 无；1 或 2，与 pendingUndoRequesterColor 同时有效 */
+    private int pendingUndoPops;
     /** 集群内任一端是否仍有黑方连接（跨实例展示用） */
     private boolean clusterBlackConnected;
     private boolean clusterWhiteConnected;
@@ -32,6 +34,7 @@ public class GameRoomStateSnapshot {
         s.matchRound = 1;
         s.moves = new ArrayList<>();
         s.pendingUndoRequesterColor = null;
+        s.pendingUndoPops = 0;
         s.clusterBlackConnected = false;
         s.clusterWhiteConnected = false;
         return s;
@@ -99,6 +102,14 @@ public class GameRoomStateSnapshot {
 
     public void setPendingUndoRequesterColor(Integer pendingUndoRequesterColor) {
         this.pendingUndoRequesterColor = pendingUndoRequesterColor;
+    }
+
+    public int getPendingUndoPops() {
+        return pendingUndoPops;
+    }
+
+    public void setPendingUndoPops(int pendingUndoPops) {
+        this.pendingUndoPops = pendingUndoPops;
     }
 
     public boolean isClusterBlackConnected() {

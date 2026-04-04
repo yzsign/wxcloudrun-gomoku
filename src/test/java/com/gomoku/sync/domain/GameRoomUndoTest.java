@@ -4,9 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * 悔棋：同意时只撤回申请方上一手，不得连撤两手。
- */
+/** 悔棋：一手只撤申请方上一子；对方已应手时可申请两手，同意则连撤两手。 */
 class GameRoomUndoTest {
 
     @Test
@@ -45,5 +43,22 @@ class GameRoomUndoTest {
         assertEquals(Stone.WHITE, b[7][8]);
         assertEquals(Stone.BLACK, b[7][9]);
         assertEquals(Stone.EMPTY, b[6][8]);
+    }
+
+    @Test
+    void acceptTwoPlyUndoAfterOpponentRepliedRemovesBothStones() {
+        GameRoom room = new GameRoom("r3", 15, "bt", 1L);
+        room.setWhiteToken("wt");
+        room.setWhiteUserId(2L);
+
+        assertNull(room.tryMove(Stone.BLACK, 7, 7));
+        assertNull(room.tryMove(Stone.WHITE, 7, 8));
+
+        assertNull(room.requestUndo(Stone.BLACK));
+        assertNull(room.acceptUndo(Stone.WHITE));
+
+        int[][] b = room.getBoardCopy();
+        assertEquals(Stone.EMPTY, b[7][7]);
+        assertEquals(Stone.EMPTY, b[7][8]);
     }
 }

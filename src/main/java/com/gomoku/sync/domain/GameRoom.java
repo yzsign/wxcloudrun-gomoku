@@ -7,6 +7,7 @@ import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -41,8 +42,10 @@ public class GameRoom {
     /** 走子顺序（用于悔棋） */
     private final Deque<RecordedMove> moveHistory = new ArrayDeque<>();
 
-    /** 非空表示有待对方处理的悔棋申请（申请方为上一手行棋方） */
+    /** 非空表示有待对方处理的悔棋申请 */
     private Integer pendingUndoRequesterColor;
+    /** 同意时撤销的步数：1 仅撤回申请方上一手；2 对方已应手后连撤两手（须对方同意） */
+    private int pendingUndoPops;
 
     /** 同房间多局：首局为 1，每次「再来一局」RESET 后 +1，与 games.match_round、结算上报一致 */
     private int matchRound = 1;
@@ -366,8 +369,21 @@ public class GameRoom {
         }
     }
 
+    private static RecordedMove peekSecondLast(Deque<RecordedMove> moveHistory) {
+        if (moveHistory.size() < 2) {
+            return null;
+        }
+        Iterator<RecordedMove> it = moveHistory.descendingIterator();
+        it.next();
+        return it.next();
+    }
+
     /**
-     * 申请悔棋：仅「上一手行棋方」（即当前轮到对方下时的一方）可发起。
+     * 申请悔棋：
+     * <ul>
+     *   <li>一手：仅「上一手行棋方」（轮到对方下时）可发起，撤回自己上一手；</li>
+     *   <li>两手：对方已应手、轮到自己下时，可申请连撤两手（己方上一手与对方应手），须对方同意。</li>
+     * </ul>
      *
      * @return 错误信息，null 表示成功
      */
@@ -383,10 +399,24 @@ public class GameRoom {
             if (moveHistory.isEmpty()) {
                 return "没有可悔的棋";
             }
-            if (color != oppositeColor(current)) {
+            RecordedMove last = moveHistory.peekLast();
+            int pops;
+            if (color == oppositeColor(current) && last.color == color) {
+                pops = 1;
+            } else if (color == current && moveHistory.size() >= 2) {
+                RecordedMove secondLast = peekSecondLast(moveHistory);
+                if (secondLast == null) {
+                    return "没有可悔的棋";
+                }
+                if (last.color != oppositeColor(color) || secondLast.color != color) {
+                    return "只有上一手行棋方可申请悔棋";
+                }
+                pops = 2;
+            } else {
                 return "只有上一手行棋方可申请悔棋";
             }
             pendingUndoRequesterColor = color;
+            pendingUndoPops = pops;
             return null;
         } finally {
             lock.unlock();
@@ -402,18 +432,35 @@ public class GameRoom {
             if (pendingUndoRequesterColor == color) {
                 return "须由对方同意";
             }
-            if (color != current) {
+            if (color != oppositeColor(pendingUndoRequesterColor)) {
                 return "须由对方回应";
             }
             if (moveHistory.isEmpty()) {
                 return "没有可悔的棋";
             }
-            RecordedMove last = moveHistory.peekLast();
-            if (last.color != pendingUndoRequesterColor) {
+            int pops = pendingUndoPops;
+            if (pops == 1) {
+                RecordedMove last = moveHistory.peekLast();
+                if (last.color != pendingUndoRequesterColor) {
+                    return "悔棋数据异常";
+                }
+            } else if (pops == 2) {
+                if (moveHistory.size() < 2) {
+                    return "悔棋数据异常";
+                }
+                RecordedMove last = moveHistory.peekLast();
+                RecordedMove secondLast = peekSecondLast(moveHistory);
+                if (secondLast == null
+                        || last.color != oppositeColor(pendingUndoRequesterColor)
+                        || secondLast.color != pendingUndoRequesterColor) {
+                    return "悔棋数据异常";
+                }
+            } else {
                 return "悔棋数据异常";
             }
-            applyUndoPops();
+            applyUndoPops(pops);
             pendingUndoRequesterColor = null;
+            pendingUndoPops = 0;
             return null;
         } finally {
             lock.unlock();
@@ -429,10 +476,11 @@ public class GameRoom {
             if (pendingUndoRequesterColor == color) {
                 return "须由对方回应";
             }
-            if (color != current) {
+            if (color != oppositeColor(pendingUndoRequesterColor)) {
                 return "须由对方回应";
             }
             pendingUndoRequesterColor = null;
+            pendingUndoPops = 0;
             return null;
         } finally {
             lock.unlock();
@@ -450,6 +498,7 @@ public class GameRoom {
                 return "仅申请人可取消";
             }
             pendingUndoRequesterColor = null;
+            pendingUndoPops = 0;
             return null;
         } finally {
             lock.unlock();
@@ -457,12 +506,13 @@ public class GameRoom {
     }
 
     /**
-     * 同意悔棋时只撤回申请方上一手（与 pendingUndoRequesterColor 一致），不移除对手棋子。
-     * 调用方须在持锁下保证 peekLast().color == pendingUndoRequesterColor。
+     * 按步数从栈顶撤销：一手仅申请方上一子；两手为对方应手与申请方上一子（先撤对方再撤己方）。
      */
-    private void applyUndoPops() {
-        RecordedMove m = moveHistory.removeLast();
-        board[m.r][m.c] = Stone.EMPTY;
+    private void applyUndoPops(int count) {
+        for (int i = 0; i < count; i++) {
+            RecordedMove m = moveHistory.removeLast();
+            board[m.r][m.c] = Stone.EMPTY;
+        }
         gameOver = false;
         winner = null;
         syncCurrentFromBoard();
@@ -520,6 +570,7 @@ public class GameRoom {
             winner = null;
             moveHistory.clear();
             pendingUndoRequesterColor = null;
+            pendingUndoPops = 0;
         } finally {
             lock.unlock();
         }
@@ -540,6 +591,7 @@ public class GameRoom {
             s.setWinner(winner);
             s.setMatchRound(matchRound);
             s.setPendingUndoRequesterColor(pendingUndoRequesterColor);
+            s.setPendingUndoPops(pendingUndoRequesterColor == null ? 0 : pendingUndoPops);
             s.setClusterBlackConnected(clusterBlackConnected);
             s.setClusterWhiteConnected(clusterWhiteConnected);
             List<GameRoomStateSnapshot.MoveRecord> list = new ArrayList<>();
@@ -571,6 +623,14 @@ public class GameRoom {
             winner = snap.getWinner();
             matchRound = snap.getMatchRound();
             pendingUndoRequesterColor = snap.getPendingUndoRequesterColor();
+            int snapPops = snap.getPendingUndoPops();
+            if (pendingUndoRequesterColor == null) {
+                pendingUndoPops = 0;
+            } else if (snapPops == 1 || snapPops == 2) {
+                pendingUndoPops = snapPops;
+            } else {
+                pendingUndoPops = 1;
+            }
             clusterBlackConnected = snap.isClusterBlackConnected();
             clusterWhiteConnected = snap.isClusterWhiteConnected();
             moveHistory.clear();
