@@ -7,6 +7,7 @@ public class GameRecord {
 
     private Long id;
     private String roomId;
+    private int matchRound;
     private long blackUserId;
     private long whiteUserId;
     private int totalSteps;
@@ -33,6 +34,14 @@ public class GameRecord {
 
     public void setRoomId(String roomId) {
         this.roomId = roomId;
+    }
+
+    public int getMatchRound() {
+        return matchRound;
+    }
+
+    public void setMatchRound(int matchRound) {
+        this.matchRound = matchRound;
     }
 
     public long getBlackUserId() {

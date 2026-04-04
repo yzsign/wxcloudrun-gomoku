@@ -3,6 +3,7 @@ package com.gomoku.sync.service;
 import com.gomoku.sync.api.dto.SettleGameRequest;
 import com.gomoku.sync.api.dto.SettleGameResponse;
 import com.gomoku.sync.domain.GameRecord;
+import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RatingChangeLog;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.User;
@@ -33,16 +34,19 @@ public class RatingSettlementService {
     private final GameMapper gameMapper;
     private final RatingChangeLogMapper ratingChangeLogMapper;
     private final UserMapper userMapper;
+    private final RoomService roomService;
 
     public RatingSettlementService(
             RoomParticipantMapper roomParticipantMapper,
             GameMapper gameMapper,
             RatingChangeLogMapper ratingChangeLogMapper,
-            UserMapper userMapper) {
+            UserMapper userMapper,
+            RoomService roomService) {
         this.roomParticipantMapper = roomParticipantMapper;
         this.gameMapper = gameMapper;
         this.ratingChangeLogMapper = ratingChangeLogMapper;
         this.userMapper = userMapper;
+        this.roomService = roomService;
     }
 
     @Transactional
@@ -62,8 +66,17 @@ public class RatingSettlementService {
             throw new IllegalArgumentException("totalSteps 非法");
         }
 
-        if (gameMapper.countByRoomId(req.getRoomId()) > 0) {
-            throw new IllegalStateException("该房间已结算");
+        int matchRound = req.getMatchRound() != null ? req.getMatchRound() : 1;
+        if (matchRound < 1) {
+            throw new IllegalArgumentException("matchRound 非法");
+        }
+        GameRoom live = roomService.getRoom(req.getRoomId());
+        if (live != null && live.getMatchRound() != matchRound) {
+            throw new IllegalArgumentException("局次不匹配");
+        }
+
+        if (gameMapper.countByRoomIdAndMatchRound(req.getRoomId(), matchRound) > 0) {
+            throw new IllegalStateException("该房间本局已结算");
         }
 
         RoomParticipant rp = roomParticipantMapper.selectByRoomId(req.getRoomId());
@@ -201,6 +214,7 @@ public class RatingSettlementService {
 
         GameRecord game = new GameRecord();
         game.setRoomId(req.getRoomId());
+        game.setMatchRound(matchRound);
         game.setBlackUserId(blackId);
         game.setWhiteUserId(whiteId);
         game.setTotalSteps(steps);

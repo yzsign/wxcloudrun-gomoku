@@ -33,6 +33,9 @@ public class GameRoom {
     /** 非空表示有待对方处理的悔棋申请（申请方为上一手行棋方） */
     private Integer pendingUndoRequesterColor;
 
+    /** 同房间多局：首局为 1，每次「再来一局」RESET 后 +1，与 games.match_round、结算上报一致 */
+    private int matchRound = 1;
+
     public GameRoom(String roomId, int size, String blackToken, long blackUserId) {
         this.roomId = roomId;
         this.size = size;
@@ -116,6 +119,15 @@ public class GameRoom {
         lock.lock();
         try {
             return gameOver;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public int getMatchRound() {
+        lock.lock();
+        try {
+            return matchRound;
         } finally {
             lock.unlock();
         }
@@ -352,6 +364,7 @@ public class GameRoom {
     public void resetMatch() {
         lock.lock();
         try {
+            matchRound++;
             for (int i = 0; i < size; i++) {
                 for (int j = 0; j < size; j++) {
                     board[i][j] = Stone.EMPTY;

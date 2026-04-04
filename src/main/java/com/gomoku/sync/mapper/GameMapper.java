@@ -7,5 +7,5 @@ public interface GameMapper {
 
     int insert(GameRecord game);
 
-    int countByRoomId(@Param("roomId") String roomId);
+    int countByRoomIdAndMatchRound(@Param("roomId") String roomId, @Param("matchRound") int matchRound);
 }

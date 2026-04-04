@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `room_participants` (
 CREATE TABLE IF NOT EXISTS `games` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `room_id` VARCHAR(32) NOT NULL,
+  `match_round` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '同房间局次，首局 1',
   `black_user_id` BIGINT UNSIGNED NOT NULL,
   `white_user_id` BIGINT UNSIGNED NOT NULL,
   `total_steps` INT UNSIGNED NOT NULL,
@@ -28,7 +29,7 @@ CREATE TABLE IF NOT EXISTS `games` (
   `white_elo_delta` INT NOT NULL,
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_room_id` (`room_id`),
+  UNIQUE KEY `uk_room_match` (`room_id`, `match_round`),
   KEY `idx_black_user` (`black_user_id`, `created_at`),
   KEY `idx_white_user` (`white_user_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -6,6 +6,8 @@ package com.gomoku.sync.api.dto;
 public class SettleGameRequest {
 
     private String roomId;
+    /** 同房间第几局：首局 1，再来一局后递增；不传则按 1 处理（兼容旧客户端） */
+    private Integer matchRound;
     /** BLACK_WIN | WHITE_WIN | DRAW */
     private String outcome;
     private int totalSteps;
@@ -18,6 +20,14 @@ public class SettleGameRequest {
 
     public void setRoomId(String roomId) {
         this.roomId = roomId;
+    }
+
+    public Integer getMatchRound() {
+        return matchRound;
+    }
+
+    public void setMatchRound(Integer matchRound) {
+        this.matchRound = matchRound;
     }
 
     public String getOutcome() {

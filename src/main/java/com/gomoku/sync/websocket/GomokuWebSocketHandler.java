@@ -297,6 +297,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             } else {
                 n.put("winner", room.getWinner());
             }
+            n.put("matchRound", room.getMatchRound());
             n.put("yourColor", yourColor);
             n.put("blackConnected", room.getBlackSession() != null && room.getBlackSession().isOpen());
             boolean whiteHere =
