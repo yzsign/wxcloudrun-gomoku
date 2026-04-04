@@ -1,7 +1,9 @@
 package com.gomoku.sync.domain;
 
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -13,10 +15,14 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class GameRoom {
 
+    /** 与 GomokuWebSocketHandler 中会话属性键一致，交换座位后需刷新 */
+    private static final String WS_ATTR_COLOR = "color";
+
     private final String roomId;
     private final int size;
-    private final String blackToken;
-    private final long blackUserId;
+    /** 先手座位；随机匹配可能在双方入座后交换，与 white 侧对称可变 */
+    private String blackToken;
+    private long blackUserId;
     private String whiteToken;
     private Long whiteUserId;
     /** 随机匹配超时接入的数据库人机：无 WebSocket，由服务端代下白棋 */
@@ -226,6 +232,85 @@ public class GameRoom {
             return Stone.WHITE;
         }
         return null;
+    }
+
+    /**
+     * @return "BLACK" / "WHITE" 或 null（非本房间参与者）
+     */
+    public String resolveSideColorName(long userId) {
+        if (blackUserId == userId) {
+            return "BLACK";
+        }
+        if (whiteUserId != null && whiteUserId == userId) {
+            return "WHITE";
+        }
+        return null;
+    }
+
+    /**
+     * 真人双方已入座后交换先后手（黑/白座位与 token）；仅用于随机匹配，棋盘须仍为空。
+     */
+    public void swapHumanSeats() {
+        lock.lock();
+        try {
+            if (whiteIsBot) {
+                throw new IllegalStateException("人机局不可交换座位");
+            }
+            if (whiteToken == null || whiteUserId == null) {
+                throw new IllegalStateException("白方未入座");
+            }
+            if (!isBoardEmpty()) {
+                throw new IllegalStateException("已有落子，不可交换座位");
+            }
+            long oldBlackUid = blackUserId;
+            String oldBlackTok = blackToken;
+            long oldWhiteUid = whiteUserId;
+            String oldWhiteTok = whiteToken;
+
+            blackUserId = oldWhiteUid;
+            blackToken = oldWhiteTok;
+            whiteUserId = oldBlackUid;
+            whiteToken = oldBlackTok;
+
+            WebSocketSession sb = blackSession;
+            blackSession = whiteSession;
+            whiteSession = sb;
+
+            boolean cb = clusterBlackConnected;
+            clusterBlackConnected = clusterWhiteConnected;
+            clusterWhiteConnected = cb;
+
+            refreshWebSocketSeatColorsFromTokens();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 交换后 URI 中 token 不变，但房间侧黑/白 token 已对调，须按当前 token 重算 seat 色，否则与
+     * {@link com.gomoku.sync.websocket.GomokuWebSocketHandler} 建立连接时写入的 ATTR 不一致（例如房主先连 WS 再配对）。
+     */
+    private void refreshWebSocketSeatColorsFromTokens() {
+        refreshSessionColor(blackSession);
+        refreshSessionColor(whiteSession);
+    }
+
+    private void refreshSessionColor(WebSocketSession session) {
+        if (session == null || !session.isOpen()) {
+            return;
+        }
+        URI uri = session.getUri();
+        if (uri == null) {
+            return;
+        }
+        String token = UriComponentsBuilder.fromUri(uri).build().getQueryParams().getFirst("token");
+        if (token == null || token.isEmpty()) {
+            return;
+        }
+        Integer c = resolveColorByToken(token);
+        if (c != null) {
+            session.getAttributes().put(WS_ATTR_COLOR, c);
+        }
     }
 
     public boolean isUndoPending() {

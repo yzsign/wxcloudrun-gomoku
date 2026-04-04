@@ -4,6 +4,7 @@ import com.gomoku.sync.api.dto.RandomMatchResponse;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.mapper.UserMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
@@ -17,12 +18,17 @@ public class MatchmakingService {
 
     private final RoomService roomService;
     private final UserMapper userMapper;
+    private final boolean randomSwapSides;
     private final Deque<String> waitingRoomIds = new ArrayDeque<>();
     private final Object lock = new Object();
 
-    public MatchmakingService(RoomService roomService, UserMapper userMapper) {
+    public MatchmakingService(
+            RoomService roomService,
+            UserMapper userMapper,
+            @Value("${gomoku.match.random-swap-sides:true}") boolean randomSwapSides) {
         this.roomService = roomService;
         this.userMapper = userMapper;
+        this.randomSwapSides = randomSwapSides;
     }
 
     public RandomMatchResponse enter(long userId) {
@@ -35,8 +41,22 @@ public class MatchmakingService {
                 RoomService.JoinResult jr = roomService.joinRoom(roomId, userId);
                 if (jr.isOk()) {
                     waitingRoomIds.pollFirst();
+                    if (randomSwapSides) {
+                        roomService.maybeSwapRandomSides(roomId);
+                    }
                     GameRoom room = roomService.getRoom(roomId);
-                    return new RandomMatchResponse("guest", roomId, null, jr.getWhiteToken(), room.getSize());
+                    String yourColor = room.resolveSideColorName(userId);
+                    if (yourColor == null) {
+                        throw new IllegalStateException(
+                                "guest seat not resolved after join, roomId=" + roomId);
+                    }
+                    return new RandomMatchResponse(
+                            "guest",
+                            roomId,
+                            "BLACK".equals(yourColor) ? room.getBlackToken() : null,
+                            "WHITE".equals(yourColor) ? room.getWhiteToken() : null,
+                            room.getSize(),
+                            yourColor);
                 }
                 waitingRoomIds.pollFirst();
                 if ("ROOM_NOT_FOUND".equals(jr.getError())) {
@@ -46,7 +66,7 @@ public class MatchmakingService {
             }
             GameRoom room = roomService.createRoom(userId);
             waitingRoomIds.addLast(room.getRoomId());
-            return new RandomMatchResponse("host", room.getRoomId(), room.getBlackToken(), null, room.getSize());
+            return new RandomMatchResponse("host", room.getRoomId(), room.getBlackToken(), null, room.getSize(), null);
         }
     }
 

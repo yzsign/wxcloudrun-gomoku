@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class RoomService {
@@ -125,6 +126,53 @@ public class RoomService {
                 return JoinResult.notFound();
             }
             return JoinResult.ok(whiteToken);
+        }
+    }
+
+    /**
+     * 真人双方已入座后 50% 交换先后手（仅棋盘仍为空时）；同步 DB 与内存。
+     *
+     * @return 是否发生了交换
+     */
+    public boolean maybeSwapRandomSides(String roomId) {
+        GameRoom room = getRoom(roomId);
+        if (room == null) {
+            return false;
+        }
+        synchronized (room) {
+            if (room.isWhiteIsBot()) {
+                return false;
+            }
+            if (!room.hasGuest()) {
+                return false;
+            }
+            if (!ThreadLocalRandom.current().nextBoolean()) {
+                return false;
+            }
+            room.swapHumanSeats();
+            try {
+                Long w = room.getWhiteUserId();
+                if (w == null) {
+                    room.swapHumanSeats();
+                    return false;
+                }
+                int n =
+                        roomParticipantMapper.updateBothSides(
+                                roomId,
+                                room.getBlackUserId(),
+                                room.getBlackToken(),
+                                w,
+                                room.getWhiteToken());
+                if (n != 1) {
+                    room.swapHumanSeats();
+                    return false;
+                }
+            } catch (Exception e) {
+                room.swapHumanSeats();
+                throw new IllegalStateException("交换先后手失败", e);
+            }
+            roomGameStateService.tryPersist(room);
+            return true;
         }
     }
 

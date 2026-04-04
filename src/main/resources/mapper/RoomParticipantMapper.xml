@@ -26,6 +26,15 @@
           AND white_user_id IS NULL
     </update>
 
+    <update id="updateBothSides">
+        UPDATE room_participants
+        SET black_user_id = #{blackUserId},
+            black_token = #{blackToken},
+            white_user_id = #{whiteUserId},
+            white_token = #{whiteToken}
+        WHERE room_id = #{roomId}
+    </update>
+
     <update id="updateBotMeta">
         UPDATE room_participants
         SET white_is_bot = #{whiteIsBot},

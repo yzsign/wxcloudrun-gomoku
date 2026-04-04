@@ -1,6 +1,7 @@
 package com.gomoku.sync.api;
 
 import com.gomoku.sync.api.dto.ApiError;
+import com.gomoku.sync.api.dto.RandomMatchPairedResponse;
 import com.gomoku.sync.api.dto.RandomMatchResponse;
 import com.gomoku.sync.api.dto.FallbackBotResponse;
 import com.gomoku.sync.domain.GameRoom;
@@ -9,6 +10,7 @@ import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,6 +46,35 @@ public class MatchController {
                     .body(new ApiError("UNAUTHORIZED", "请先登录（需 Authorization: Bearer sessionToken）"));
         }
         return ResponseEntity.ok(matchmakingService.enter(uid.get()));
+    }
+
+    /**
+     * 房主在对手加入后拉取最终座位与 WebSocket token（随机先后手交换后，须用本接口的 yourToken 连 WS，勿仅用首次 POST /random 的 blackToken）。
+     */
+    @GetMapping("/random/paired")
+    public ResponseEntity<?> randomMatchPaired(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam("roomId") String roomId) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        GameRoom room = roomService.getRoom(roomId);
+        if (room == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiError("ROOM_NOT_FOUND", "房间不存在"));
+        }
+        if (!room.hasGuest()) {
+            return ResponseEntity.ok(RandomMatchPairedResponse.waiting(room.getSize()));
+        }
+        String side = room.resolveSideColorName(uid.get());
+        if (side == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiError("FORBIDDEN", "你不是该房间参与者"));
+        }
+        String token = "BLACK".equals(side) ? room.getBlackToken() : room.getWhiteToken();
+        return ResponseEntity.ok(RandomMatchPairedResponse.paired(room.getSize(), side, token));
     }
 
     /**
