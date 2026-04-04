@@ -15,21 +15,30 @@ public final class GomokuAiEngine {
 
     private static final int[][] DIRS = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
     private static final int DEFAULT_SEARCH_DEPTH = 4;
-    /** 随机匹配人机：每步搜索深度下界（含） */
-    private static final int RANDOM_MATCH_BOT_DEPTH_MIN = 2;
-    /** 随机匹配人机：每步搜索深度上界（含） */
-    private static final int RANDOM_MATCH_BOT_DEPTH_MAX = 4;
+    /** 人机深度全局上限，防止 DB 误配极大值导致单步耗时过长 */
+    private static final int ABS_MAX_BOT_SEARCH_DEPTH = 12;
     private static final int MAX_CANDIDATES = 32;
 
     private GomokuAiEngine() {}
 
     /**
-     * 随机匹配白方人机：每步在 [{@value #RANDOM_MATCH_BOT_DEPTH_MIN}, {@value #RANDOM_MATCH_BOT_DEPTH_MAX}] 间随机搜索深度，
-     * 强弱与耗时均有波动（必胜/必堵仍优先）。
+     * 人机每步在 [min, max] 间随机 minimax 搜索深度（与 users.bot_search_depth_* 对应；必胜/必堵仍优先）。
+     * min、max 会被限制在 [1, {@value #ABS_MAX_BOT_SEARCH_DEPTH}]。
      */
-    public static int nextRandomMatchBotSearchDepth() {
-        return ThreadLocalRandom.current()
-                .nextInt(RANDOM_MATCH_BOT_DEPTH_MIN, RANDOM_MATCH_BOT_DEPTH_MAX + 1);
+    public static int nextBotSearchDepthInRange(int min, int max) {
+        if (min > max) {
+            int t = min;
+            min = max;
+            max = t;
+        }
+        min = Math.min(Math.max(1, min), ABS_MAX_BOT_SEARCH_DEPTH);
+        max = Math.min(Math.max(1, max), ABS_MAX_BOT_SEARCH_DEPTH);
+        if (min > max) {
+            int t = min;
+            min = max;
+            max = t;
+        }
+        return ThreadLocalRandom.current().nextInt(min, max + 1);
     }
 
     /**
@@ -40,7 +49,7 @@ public final class GomokuAiEngine {
     }
 
     /**
-     * @param searchDepth 极小搜索层数（≥1），越大越强但越慢；随机匹配人机每步可用 {@link #nextRandomMatchBotSearchDepth()}
+     * @param searchDepth 极小搜索层数（≥1），越大越强但越慢；人机每步可用 {@link #nextBotSearchDepthInRange(int, int)}
      */
     public static int[] chooseMove(int[][] board, int size, int aiColor, int searchDepth) {
         if (searchDepth < 1) {

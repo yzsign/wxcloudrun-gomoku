@@ -19,6 +19,9 @@ public class GameRoom {
     private Long whiteUserId;
     /** 随机匹配超时接入的数据库人机：无 WebSocket，由服务端代下白棋 */
     private boolean whiteIsBot;
+    /** 白方为人机时：该人机账号在 DB 中配置的搜索深度区间（入座时写入；每步在区间内随机） */
+    private int botSearchDepthMin = 2;
+    private int botSearchDepthMax = 4;
     private final int[][] board;
     private int current = Stone.BLACK;
     private boolean gameOver;
@@ -87,6 +90,37 @@ public class GameRoom {
 
     public void setWhiteIsBot(boolean whiteIsBot) {
         this.whiteIsBot = whiteIsBot;
+    }
+
+    /**
+     * 人机入座时由匹配服务根据 users.bot_search_depth_* 设置；非人机可忽略。
+     */
+    public void setBotSearchDepthRange(int min, int max) {
+        lock.lock();
+        try {
+            this.botSearchDepthMin = min;
+            this.botSearchDepthMax = max;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public int getBotSearchDepthMin() {
+        lock.lock();
+        try {
+            return botSearchDepthMin;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public int getBotSearchDepthMax() {
+        lock.lock();
+        try {
+            return botSearchDepthMax;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public boolean hasGuest() {

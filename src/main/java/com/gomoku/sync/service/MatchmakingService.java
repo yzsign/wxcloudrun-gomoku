@@ -2,6 +2,7 @@ package com.gomoku.sync.service;
 
 import com.gomoku.sync.api.dto.RandomMatchResponse;
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.domain.User;
 import com.gomoku.sync.mapper.UserMapper;
 import org.springframework.stereotype.Service;
 
@@ -114,6 +115,17 @@ public class MatchmakingService {
                     roomService.removeRoomIfExists(roomId);
                 }
                 return FallbackBotOutcome.ROOM_NOT_FOUND;
+            }
+            User botUser = userMapper.selectById(botId);
+            if (botUser != null) {
+                int dmin = Math.max(1, botUser.getBotSearchDepthMin());
+                int dmax = Math.max(1, botUser.getBotSearchDepthMax());
+                if (dmin > dmax) {
+                    int t = dmin;
+                    dmin = dmax;
+                    dmax = t;
+                }
+                room.setBotSearchDepthRange(dmin, dmax);
             }
             room.setWhiteIsBot(true);
             return FallbackBotOutcome.OK;

@@ -11,6 +11,9 @@ public class User {
     private Long id;
     private String openid;
     private boolean bot;
+    /** 仅 is_bot=1 有效：随机匹配时每步在 [min,max] 间随机 minimax 深度 */
+    private int botSearchDepthMin = 2;
+    private int botSearchDepthMax = 4;
     private String unionid;
     private String nickname;
     private String avatarUrl;
@@ -56,6 +59,22 @@ public class User {
 
     public void setBot(boolean bot) {
         this.bot = bot;
+    }
+
+    public int getBotSearchDepthMin() {
+        return botSearchDepthMin;
+    }
+
+    public void setBotSearchDepthMin(int botSearchDepthMin) {
+        this.botSearchDepthMin = botSearchDepthMin;
+    }
+
+    public int getBotSearchDepthMax() {
+        return botSearchDepthMax;
+    }
+
+    public void setBotSearchDepthMax(int botSearchDepthMax) {
+        this.botSearchDepthMax = botSearchDepthMax;
     }
 
     public String getUnionid() {

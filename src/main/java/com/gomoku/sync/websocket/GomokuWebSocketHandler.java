@@ -237,7 +237,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         int size = room.getSize();
         int[] mv =
                 GomokuAiEngine.chooseMove(
-                        copy, size, Stone.WHITE, GomokuAiEngine.nextRandomMatchBotSearchDepth());
+                        copy,
+                        size,
+                        Stone.WHITE,
+                        GomokuAiEngine.nextBotSearchDepthInRange(
+                                room.getBotSearchDepthMin(), room.getBotSearchDepthMax()));
         String err = room.tryMove(Stone.WHITE, mv[0], mv[1]);
         if (err != null) {
             return;

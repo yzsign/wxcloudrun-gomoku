@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS `users` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `openid` VARCHAR(64) NOT NULL,
   `is_bot` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=人机账号',
+  `bot_search_depth_min` INT UNSIGNED NOT NULL DEFAULT 2 COMMENT '人机：minimax 深度下限（含）',
+  `bot_search_depth_max` INT UNSIGNED NOT NULL DEFAULT 4 COMMENT '人机：minimax 深度上限（含）',
   `unionid` VARCHAR(64) DEFAULT NULL,
   `nickname` VARCHAR(64) DEFAULT NULL,
   `avatar_url` VARCHAR(512) DEFAULT NULL,
