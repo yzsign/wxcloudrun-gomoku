@@ -21,7 +21,7 @@ public class GameRoom {
     private boolean whiteIsBot;
     /** 白方为人机时：该人机账号在 DB 中配置的搜索深度区间（入座时写入；每步在区间内随机） */
     private int botSearchDepthMin = 2;
-    private int botSearchDepthMax = 4;
+    private int botSearchDepthMax = 3;
     private final int[][] board;
     private int current = Stone.BLACK;
     private boolean gameOver;

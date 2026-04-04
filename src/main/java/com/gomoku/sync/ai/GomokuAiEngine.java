@@ -9,21 +9,31 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 五子棋人机落子（与前端 gomoku.js 思路接近：必胜/必堵 + 候选裁剪 + minimax）。
+ * 五子棋人机落子（必胜/必堵 + 候选裁剪 + minimax）。
+ * 优化：仅扫描合法五连窗口评估、单步时间上限、深度收紧候选，降低 WS 线程阻塞。
  */
 public final class GomokuAiEngine {
 
     private static final int[][] DIRS = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
-    private static final int DEFAULT_SEARCH_DEPTH = 4;
-    /** 人机深度全局上限，防止 DB 误配极大值导致单步耗时过长 */
-    private static final int ABS_MAX_BOT_SEARCH_DEPTH = 12;
-    private static final int MAX_CANDIDATES = 32;
+    /** 未指定 DB 深度时的默认 minimax 层数（叶为 0） */
+    private static final int DEFAULT_SEARCH_DEPTH = 3;
+    /** 人机深度全局上限，防止 DB 误配极大值 */
+    private static final int ABS_MAX_BOT_SEARCH_DEPTH = 8;
+    /** 根节点候选上限 */
+    private static final int MAX_CANDIDATES_ROOT = 18;
+    /** 更深层的候选上限（减少分支因子） */
+    private static final int MAX_CANDIDATES_DEEP = 12;
+    /** 单步思考时间上限（纳秒），超时则叶节点提前返回局面分 */
+    private static final long MOVE_TIME_BUDGET_NANOS = 45_000_000L;
+    /** 实际搜索深度上限（与 DB 取 min） */
+    private static final int EFFECTIVE_DEPTH_CAP = 5;
+
+    private static final ThreadLocal<Long> DEADLINE_NANOS = new ThreadLocal<>();
 
     private GomokuAiEngine() {}
 
     /**
      * 人机每步在 [min, max] 间随机 minimax 搜索深度（与 users.bot_search_depth_* 对应；必胜/必堵仍优先）。
-     * min、max 会被限制在 [1, {@value #ABS_MAX_BOT_SEARCH_DEPTH}]。
      */
     public static int nextBotSearchDepthInRange(int min, int max) {
         if (min > max) {
@@ -41,20 +51,30 @@ public final class GomokuAiEngine {
         return ThreadLocalRandom.current().nextInt(min, max + 1);
     }
 
-    /**
-     * @return 长度 2 的数组 [r, c]，不应返回 null（极端情况落中心空位）
-     */
     public static int[] chooseMove(int[][] board, int size, int aiColor) {
         return chooseMove(board, size, aiColor, DEFAULT_SEARCH_DEPTH);
     }
 
-    /**
-     * @param searchDepth 极小搜索层数（≥1），越大越强但越慢；人机每步可用 {@link #nextBotSearchDepthInRange(int, int)}
-     */
     public static int[] chooseMove(int[][] board, int size, int aiColor, int searchDepth) {
         if (searchDepth < 1) {
             searchDepth = 1;
         }
+        searchDepth = Math.min(searchDepth, EFFECTIVE_DEPTH_CAP);
+        long deadline = System.nanoTime() + MOVE_TIME_BUDGET_NANOS;
+        DEADLINE_NANOS.set(deadline);
+        try {
+            return chooseMoveInner(board, size, aiColor, searchDepth);
+        } finally {
+            DEADLINE_NANOS.remove();
+        }
+    }
+
+    private static boolean timeUp() {
+        Long d = DEADLINE_NANOS.get();
+        return d != null && System.nanoTime() > d;
+    }
+
+    private static int[] chooseMoveInner(int[][] board, int size, int aiColor, int searchDepth) {
         int opp = opposite(aiColor);
         int stones = countStones(board, size);
         if (stones == 0) {
@@ -79,14 +99,17 @@ public final class GomokuAiEngine {
                 (int[] m) -> -(scorePoint(board, size, m[0], m[1], aiColor)
                         + scorePoint(board, size, m[0], m[1], opp))));
 
-        if (cands.size() > MAX_CANDIDATES) {
-            cands = cands.subList(0, MAX_CANDIDATES);
-        }
+        int cap = Math.min(MAX_CANDIDATES_ROOT, cands.size());
+        cands = cands.subList(0, cap);
 
         int bestR = cands.get(0)[0];
         int bestC = cands.get(0)[1];
         int bestScore = Integer.MIN_VALUE;
+        int plyDepth = searchDepth - 1;
         for (int[] m : cands) {
+            if (timeUp()) {
+                break;
+            }
             int r = m[0];
             int c = m[1];
             if (board[r][c] != Stone.EMPTY) {
@@ -101,13 +124,14 @@ public final class GomokuAiEngine {
             sc = minimax(
                     board,
                     size,
-                    searchDepth - 1,
+                    plyDepth,
                     false,
                     aiColor,
                     opp,
                     Integer.MIN_VALUE,
                     Integer.MAX_VALUE,
-                    searchDepth);
+                    searchDepth,
+                    1);
             board[r][c] = Stone.EMPTY;
             if (sc > bestScore) {
                 bestScore = sc;
@@ -116,6 +140,16 @@ public final class GomokuAiEngine {
             }
         }
         return new int[]{bestR, bestC};
+    }
+
+    private static int maxCandForDepth(int depthRemaining) {
+        if (depthRemaining >= 3) {
+            return MAX_CANDIDATES_ROOT;
+        }
+        if (depthRemaining >= 2) {
+            return MAX_CANDIDATES_DEEP;
+        }
+        return Math.min(10, MAX_CANDIDATES_DEEP);
     }
 
     private static int minimax(
@@ -127,25 +161,31 @@ public final class GomokuAiEngine {
             int opp,
             int alpha,
             int beta,
-            int searchDepth) {
+            int rootSearchDepth,
+            int depthFromRoot) {
+        if (timeUp()) {
+            return evaluateBoard(board, size, aiColor);
+        }
         if (depth == 0) {
-            return evaluate(board, size, aiColor);
+            return evaluateBoard(board, size, aiColor);
         }
         int turn = maximizing ? aiColor : opp;
         List<int[]> cands = getCandidates(board, size);
         if (cands.isEmpty()) {
-            return evaluate(board, size, aiColor);
+            return evaluateBoard(board, size, aiColor);
         }
         cands.sort(Comparator.comparingInt(
                 (int[] m) -> -(scorePoint(board, size, m[0], m[1], aiColor)
                         + scorePoint(board, size, m[0], m[1], opp))));
-        if (cands.size() > MAX_CANDIDATES) {
-            cands = cands.subList(0, MAX_CANDIDATES);
-        }
+        int cap = Math.min(maxCandForDepth(depth), cands.size());
+        cands = cands.subList(0, cap);
 
         if (maximizing) {
             int maxEval = Integer.MIN_VALUE;
             for (int[] m : cands) {
+                if (timeUp()) {
+                    return evaluateBoard(board, size, aiColor);
+                }
                 int r = m[0];
                 int c = m[1];
                 if (board[r][c] != Stone.EMPTY) {
@@ -154,11 +194,21 @@ public final class GomokuAiEngine {
                 board[r][c] = turn;
                 int ev;
                 if (WinChecker.checkWin(board, size, r, c, turn)) {
-                    ev = 2_000_000 - (searchDepth - depth);
+                    ev = 2_000_000 - (rootSearchDepth - depth);
                 } else if (WinChecker.boardFull(board, size)) {
                     ev = 0;
                 } else {
-                    ev = minimax(board, size, depth - 1, false, aiColor, opp, alpha, beta, searchDepth);
+                    ev = minimax(
+                            board,
+                            size,
+                            depth - 1,
+                            false,
+                            aiColor,
+                            opp,
+                            alpha,
+                            beta,
+                            rootSearchDepth,
+                            depthFromRoot + 1);
                 }
                 board[r][c] = Stone.EMPTY;
                 maxEval = Math.max(maxEval, ev);
@@ -171,6 +221,9 @@ public final class GomokuAiEngine {
         }
         int minEval = Integer.MAX_VALUE;
         for (int[] m : cands) {
+            if (timeUp()) {
+                return evaluateBoard(board, size, aiColor);
+            }
             int r = m[0];
             int c = m[1];
             if (board[r][c] != Stone.EMPTY) {
@@ -179,11 +232,21 @@ public final class GomokuAiEngine {
             board[r][c] = turn;
             int ev;
             if (WinChecker.checkWin(board, size, r, c, turn)) {
-                ev = -2_000_000 + (searchDepth - depth);
+                ev = -2_000_000 + (rootSearchDepth - depth);
             } else if (WinChecker.boardFull(board, size)) {
                 ev = 0;
             } else {
-                ev = minimax(board, size, depth - 1, true, aiColor, opp, alpha, beta, searchDepth);
+                ev = minimax(
+                        board,
+                        size,
+                        depth - 1,
+                        true,
+                        aiColor,
+                        opp,
+                        alpha,
+                        beta,
+                        rootSearchDepth,
+                        depthFromRoot + 1);
             }
             board[r][c] = Stone.EMPTY;
             minEval = Math.min(minEval, ev);
@@ -195,21 +258,41 @@ public final class GomokuAiEngine {
         return minEval;
     }
 
-    private static int evaluate(int[][] board, int size, int aiColor) {
+    /**
+     * 只遍历四个方向上「合法五连起点」的窗口，等价于原全棋盘逐格评估但调用量更少。
+     */
+    private static int evaluateBoard(int[][] board, int size, int aiColor) {
         int opp = opposite(aiColor);
         int s = 0;
-        for (int r = 0; r < size; r++) {
-            for (int c = 0; c < size; c++) {
-                for (int[] dir : DIRS) {
-                    s += lineScore(board, size, r, c, dir[0], dir[1], aiColor);
-                    s -= lineScore(board, size, r, c, dir[0], dir[1], opp);
-                }
+        int r;
+        int c;
+        for (r = 0; r < size; r++) {
+            for (c = 0; c <= size - 5; c++) {
+                s += lineScore(board, size, r, c, 0, 1, aiColor);
+                s -= lineScore(board, size, r, c, 0, 1, opp);
+            }
+        }
+        for (c = 0; c < size; c++) {
+            for (r = 0; r <= size - 5; r++) {
+                s += lineScore(board, size, r, c, 1, 0, aiColor);
+                s -= lineScore(board, size, r, c, 1, 0, opp);
+            }
+        }
+        for (r = 0; r <= size - 5; r++) {
+            for (c = 0; c <= size - 5; c++) {
+                s += lineScore(board, size, r, c, 1, 1, aiColor);
+                s -= lineScore(board, size, r, c, 1, 1, opp);
+            }
+        }
+        for (r = 0; r <= size - 5; r++) {
+            for (c = 4; c < size; c++) {
+                s += lineScore(board, size, r, c, 1, -1, aiColor);
+                s -= lineScore(board, size, r, c, 1, -1, opp);
             }
         }
         return s;
     }
 
-    /** 从 (r,c) 沿方向取 5 格窗口计分（与 WinChecker 五连检测一致） */
     private static int lineScore(int[][] board, int size, int r, int c, int dr, int dc, int color) {
         int[] cells = new int[5];
         for (int k = 0; k < 5; k++) {
@@ -254,7 +337,6 @@ public final class GomokuAiEngine {
         return 0;
     }
 
-    /** 候选点排序：汇总经过 (r,c) 的各 5 格窗口棋型分 */
     private static int scorePoint(int[][] board, int size, int r, int c, int color) {
         int sum = 0;
         for (int[] dir : DIRS) {
