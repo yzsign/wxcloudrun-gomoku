@@ -116,10 +116,12 @@ public class MatchmakingService {
                 }
                 return FallbackBotOutcome.ROOM_NOT_FOUND;
             }
+            int dmin = 2;
+            int dmax = 3;
             User botUser = userMapper.selectById(botId);
             if (botUser != null) {
-                int dmin = Math.max(1, botUser.getBotSearchDepthMin());
-                int dmax = Math.max(1, botUser.getBotSearchDepthMax());
+                dmin = Math.max(1, botUser.getBotSearchDepthMin());
+                dmax = Math.max(1, botUser.getBotSearchDepthMax());
                 if (dmin > dmax) {
                     int t = dmin;
                     dmin = dmax;
@@ -128,6 +130,7 @@ public class MatchmakingService {
                 room.setBotSearchDepthRange(dmin, dmax);
             }
             room.setWhiteIsBot(true);
+            roomService.persistWhiteBotMeta(roomId, dmin, dmax);
             return FallbackBotOutcome.OK;
         }
     }

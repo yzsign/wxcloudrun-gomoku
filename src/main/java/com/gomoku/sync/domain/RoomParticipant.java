@@ -7,7 +7,12 @@ public class RoomParticipant {
 
     private String roomId;
     private long blackUserId;
+    private String blackToken;
     private Long whiteUserId;
+    private String whiteToken;
+    private boolean whiteIsBot;
+    private Integer botSearchDepthMin;
+    private Integer botSearchDepthMax;
 
     public String getRoomId() {
         return roomId;
@@ -25,11 +30,51 @@ public class RoomParticipant {
         this.blackUserId = blackUserId;
     }
 
+    public String getBlackToken() {
+        return blackToken;
+    }
+
+    public void setBlackToken(String blackToken) {
+        this.blackToken = blackToken;
+    }
+
     public Long getWhiteUserId() {
         return whiteUserId;
     }
 
     public void setWhiteUserId(Long whiteUserId) {
         this.whiteUserId = whiteUserId;
+    }
+
+    public String getWhiteToken() {
+        return whiteToken;
+    }
+
+    public void setWhiteToken(String whiteToken) {
+        this.whiteToken = whiteToken;
+    }
+
+    public boolean isWhiteIsBot() {
+        return whiteIsBot;
+    }
+
+    public void setWhiteIsBot(boolean whiteIsBot) {
+        this.whiteIsBot = whiteIsBot;
+    }
+
+    public Integer getBotSearchDepthMin() {
+        return botSearchDepthMin;
+    }
+
+    public void setBotSearchDepthMin(Integer botSearchDepthMin) {
+        this.botSearchDepthMin = botSearchDepthMin;
+    }
+
+    public Integer getBotSearchDepthMax() {
+        return botSearchDepthMax;
+    }
+
+    public void setBotSearchDepthMax(Integer botSearchDepthMax) {
+        this.botSearchDepthMax = botSearchDepthMax;
     }
 }

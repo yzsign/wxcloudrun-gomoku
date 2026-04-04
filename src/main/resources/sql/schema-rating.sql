@@ -4,12 +4,25 @@
 CREATE TABLE IF NOT EXISTS `room_participants` (
   `room_id` VARCHAR(32) NOT NULL,
   `black_user_id` BIGINT UNSIGNED NOT NULL,
+  `black_token` VARCHAR(64) NOT NULL COMMENT '黑方 WebSocket token',
   `white_user_id` BIGINT UNSIGNED DEFAULT NULL,
+  `white_token` VARCHAR(64) DEFAULT NULL COMMENT '白方 WebSocket token',
+  `white_is_bot` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '白方是否为人机',
+  `bot_search_depth_min` INT NULL COMMENT '人机白方搜索深度下限',
+  `bot_search_depth_max` INT NULL COMMENT '人机白方搜索深度上限',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`room_id`),
   KEY `idx_black` (`black_user_id`),
   KEY `idx_white` (`white_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `room_game_state` (
+  `room_id` VARCHAR(32) NOT NULL,
+  `state_json` LONGTEXT NOT NULL COMMENT 'GameRoomStateSnapshot JSON',
+  `state_version` BIGINT NOT NULL DEFAULT 0,
+  `updated_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`room_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `games` (

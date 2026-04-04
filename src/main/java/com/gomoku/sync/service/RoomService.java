@@ -1,6 +1,7 @@
 package com.gomoku.sync.service;
 
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -14,13 +15,16 @@ public class RoomService {
 
     private final int boardSize;
     private final RoomParticipantMapper roomParticipantMapper;
+    private final RoomGameStateService roomGameStateService;
     private final Map<String, GameRoom> rooms = new ConcurrentHashMap<>();
 
     public RoomService(
             @Value("${gomoku.board-size:15}") int boardSize,
-            RoomParticipantMapper roomParticipantMapper) {
+            RoomParticipantMapper roomParticipantMapper,
+            RoomGameStateService roomGameStateService) {
         this.boardSize = boardSize;
         this.roomParticipantMapper = roomParticipantMapper;
+        this.roomGameStateService = roomGameStateService;
     }
 
     public int getBoardSize() {
@@ -33,7 +37,8 @@ public class RoomService {
         GameRoom room = new GameRoom(roomId, boardSize, blackToken, blackUserId);
         rooms.put(roomId, room);
         try {
-            roomParticipantMapper.insertBlack(roomId, blackUserId);
+            roomParticipantMapper.insertBlack(roomId, blackUserId, blackToken);
+            roomGameStateService.insertInitial(roomId);
         } catch (Exception e) {
             rooms.remove(roomId);
             throw new IllegalStateException("写入房间参与者失败", e);
@@ -41,12 +46,57 @@ public class RoomService {
         return room;
     }
 
+    /**
+     * 获取房间：内存未命中时从 MySQL 恢复元数据（多实例下 HTTP 与 WS 可能落在不同实例）。
+     */
     public GameRoom getRoom(String roomId) {
-        return rooms.get(roomId);
+        GameRoom room = rooms.get(roomId);
+        if (room != null) {
+            return room;
+        }
+        return loadRoomFromDatabase(roomId);
+    }
+
+    private GameRoom loadRoomFromDatabase(String roomId) {
+        RoomParticipant rp = roomParticipantMapper.selectByRoomId(roomId);
+        if (rp == null || rp.getBlackToken() == null || rp.getBlackToken().isEmpty()) {
+            return null;
+        }
+        return rooms.computeIfAbsent(roomId, id -> buildRoomFromParticipant(rp));
+    }
+
+    private GameRoom buildRoomFromParticipant(RoomParticipant rp) {
+        GameRoom room =
+                new GameRoom(rp.getRoomId(), boardSize, rp.getBlackToken(), rp.getBlackUserId());
+        if (rp.getWhiteToken() != null
+                && !rp.getWhiteToken().isEmpty()
+                && rp.getWhiteUserId() != null) {
+            room.setWhiteToken(rp.getWhiteToken());
+            room.setWhiteUserId(rp.getWhiteUserId());
+            if (rp.isWhiteIsBot()) {
+                room.setWhiteIsBot(true);
+                int dmin = rp.getBotSearchDepthMin() != null ? rp.getBotSearchDepthMin() : 2;
+                int dmax = rp.getBotSearchDepthMax() != null ? rp.getBotSearchDepthMax() : 3;
+                if (dmin > dmax) {
+                    int t = dmin;
+                    dmin = dmax;
+                    dmax = t;
+                }
+                room.setBotSearchDepthRange(dmin, dmax);
+            }
+        }
+        roomGameStateService.hydrateRoom(room);
+        return room;
+    }
+
+    /** 随机匹配人机入座后，将人机标记与搜索深度写入 DB，供其他实例加载 */
+    public void persistWhiteBotMeta(String roomId, int dmin, int dmax) {
+        roomParticipantMapper.updateBotMeta(roomId, true, dmin, dmax);
     }
 
     /** 从内存中移除房间（仅用于匹配取消等场景） */
     public boolean removeRoomIfExists(String roomId) {
+        roomGameStateService.deleteByRoomId(roomId);
         roomParticipantMapper.deleteByRoomId(roomId);
         return rooms.remove(roomId) != null;
     }
@@ -55,7 +105,7 @@ public class RoomService {
      * 加入房间，生成白方 token；若房间不存在或已有白方则失败
      */
     public JoinResult joinRoom(String roomId, long whiteUserId) {
-        GameRoom room = rooms.get(roomId);
+        GameRoom room = getRoom(roomId);
         if (room == null) {
             return JoinResult.notFound();
         }
@@ -69,7 +119,7 @@ public class RoomService {
             String whiteToken = UUID.randomUUID().toString();
             room.setWhiteToken(whiteToken);
             room.setWhiteUserId(whiteUserId);
-            if (roomParticipantMapper.updateWhite(roomId, whiteUserId) != 1) {
+            if (roomParticipantMapper.updateWhite(roomId, whiteUserId, whiteToken) != 1) {
                 room.setWhiteToken(null);
                 room.setWhiteUserId(null);
                 return JoinResult.notFound();

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.RoomGameStateMapper">
+
+    <resultMap id="RoomGameStateResult" type="com.gomoku.sync.domain.RoomGameStateRow">
+        <result property="roomId" column="room_id"/>
+        <result property="stateJson" column="state_json"/>
+        <result property="stateVersion" column="state_version"/>
+    </resultMap>
+
+    <insert id="insertInitial">
+        INSERT INTO room_game_state (room_id, state_json, state_version)
+        VALUES (#{roomId}, #{stateJson}, 0)
+    </insert>
+
+    <update id="updateState">
+        UPDATE room_game_state
+        SET state_json = #{stateJson},
+            state_version = state_version + 1,
+            updated_at = CURRENT_TIMESTAMP(3)
+        WHERE room_id = #{roomId}
+          AND state_version = #{expectedVersion}
+    </update>
+
+    <select id="selectByRoomId" resultMap="RoomGameStateResult">
+        SELECT room_id, state_json, state_version
+        FROM room_game_state
+        WHERE room_id = #{roomId}
+        LIMIT 1
+    </select>
+
+    <select id="selectStateVersionByRoomId" resultType="java.lang.Long">
+        SELECT state_version
+        FROM room_game_state
+        WHERE room_id = #{roomId}
+        LIMIT 1
+    </select>
+
+    <delete id="deleteByRoomId">
+        DELETE FROM room_game_state WHERE room_id = #{roomId}
+    </delete>
+</mapper>

@@ -3,7 +3,9 @@ package com.gomoku.sync.domain;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -38,6 +40,14 @@ public class GameRoom {
 
     /** 同房间多局：首局为 1，每次「再来一局」RESET 后 +1，与 games.match_round、结算上报一致 */
     private int matchRound = 1;
+
+    /**
+     * 集群内该座位是否仍有连接（任一台实例上有 WebSocket 即 true，与 room_game_state 同步）。
+     * 用于多实例下 STATE 中 blackConnected / whiteConnected。
+     */
+    private volatile boolean clusterBlackConnected;
+
+    private volatile boolean clusterWhiteConnected;
 
     public GameRoom(String roomId, int size, String blackToken, long blackUserId) {
         this.roomId = roomId;
@@ -190,6 +200,22 @@ public class GameRoom {
 
     public void setWhiteSession(WebSocketSession whiteSession) {
         this.whiteSession = whiteSession;
+    }
+
+    public boolean isClusterBlackConnected() {
+        return clusterBlackConnected;
+    }
+
+    public void setClusterBlackConnected(boolean clusterBlackConnected) {
+        this.clusterBlackConnected = clusterBlackConnected;
+    }
+
+    public boolean isClusterWhiteConnected() {
+        return clusterWhiteConnected;
+    }
+
+    public void setClusterWhiteConnected(boolean clusterWhiteConnected) {
+        this.clusterWhiteConnected = clusterWhiteConnected;
     }
 
     public Integer resolveColorByToken(String token) {
@@ -409,6 +435,65 @@ public class GameRoom {
             winner = null;
             moveHistory.clear();
             pendingUndoRequesterColor = null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public GameRoomStateSnapshot toStateSnapshot() {
+        lock.lock();
+        try {
+            GameRoomStateSnapshot s = new GameRoomStateSnapshot();
+            s.setBoardSize(size);
+            int[][] b = new int[size][size];
+            for (int i = 0; i < size; i++) {
+                System.arraycopy(board[i], 0, b[i], 0, size);
+            }
+            s.setBoard(b);
+            s.setCurrent(current);
+            s.setGameOver(gameOver);
+            s.setWinner(winner);
+            s.setMatchRound(matchRound);
+            s.setPendingUndoRequesterColor(pendingUndoRequesterColor);
+            s.setClusterBlackConnected(clusterBlackConnected);
+            s.setClusterWhiteConnected(clusterWhiteConnected);
+            List<GameRoomStateSnapshot.MoveRecord> list = new ArrayList<>();
+            for (RecordedMove m : moveHistory) {
+                list.add(new GameRoomStateSnapshot.MoveRecord(m.r, m.c, m.color));
+            }
+            s.setMoves(list);
+            return s;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void replaceGameStateFromSnapshot(GameRoomStateSnapshot snap) {
+        if (snap == null || snap.getBoardSize() != size) {
+            throw new IllegalArgumentException("snapshot board size mismatch");
+        }
+        int[][] src = snap.getBoard();
+        if (src == null || src.length != size) {
+            throw new IllegalArgumentException("snapshot board invalid");
+        }
+        lock.lock();
+        try {
+            for (int i = 0; i < size; i++) {
+                System.arraycopy(src[i], 0, board[i], 0, size);
+            }
+            current = snap.getCurrent();
+            gameOver = snap.isGameOver();
+            winner = snap.getWinner();
+            matchRound = snap.getMatchRound();
+            pendingUndoRequesterColor = snap.getPendingUndoRequesterColor();
+            clusterBlackConnected = snap.isClusterBlackConnected();
+            clusterWhiteConnected = snap.isClusterWhiteConnected();
+            moveHistory.clear();
+            if (snap.getMoves() != null) {
+                for (GameRoomStateSnapshot.MoveRecord m : snap.getMoves()) {
+                    moveHistory.addLast(new RecordedMove(m.r, m.c, m.color));
+                }
+            }
         } finally {
             lock.unlock();
         }

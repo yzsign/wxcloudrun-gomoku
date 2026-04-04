@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.Stone;
+import com.gomoku.sync.service.RoomGameStateService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.stereotype.Component;
@@ -27,14 +28,20 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private static final String ATTR_COLOR = "color";
 
     private final RoomService roomService;
+    private final RoomGameStateService roomGameStateService;
+    private final RoomSessionTracker roomSessionTracker;
     private final ObjectMapper objectMapper;
     private final SessionJwtService sessionJwtService;
 
     public GomokuWebSocketHandler(
             RoomService roomService,
+            RoomGameStateService roomGameStateService,
+            RoomSessionTracker roomSessionTracker,
             ObjectMapper objectMapper,
             SessionJwtService sessionJwtService) {
         this.roomService = roomService;
+        this.roomGameStateService = roomGameStateService;
+        this.roomSessionTracker = roomSessionTracker;
         this.objectMapper = objectMapper;
         this.sessionJwtService = sessionJwtService;
     }
@@ -85,6 +92,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+
         session.getAttributes().put(ATTR_ROOM, room);
         session.getAttributes().put(ATTR_COLOR, color);
 
@@ -105,6 +114,15 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 room.setWhiteSession(session);
             }
         }
+
+        if (color == Stone.BLACK) {
+            room.setClusterBlackConnected(true);
+        } else if (!room.isWhiteIsBot()) {
+            room.setClusterWhiteConnected(true);
+        }
+        roomGameStateService.tryPersist(room);
+
+        roomSessionTracker.register(roomId);
 
         broadcastState(room);
         maybePlayBot(room);
@@ -138,6 +156,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleMove(WebSocketSession session, GameRoom room, int color, JsonNode root) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
         int r = root.path("r").asInt(-1);
         int c = root.path("c").asInt(-1);
         String err = room.tryMove(color, r, c);
@@ -145,11 +164,18 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             sendToSession(session, error(err));
             return;
         }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
         broadcastState(room);
         maybePlayBot(room);
     }
 
     private void handleUndoRequest(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
         String err = room.requestUndo(color);
         if (err != null) {
             sendToSession(session, error(err));
@@ -165,14 +191,27 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
         }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
         broadcastState(room);
         maybePlayBot(room);
     }
 
     private void handleUndoAccept(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
         String err = room.acceptUndo(color);
         if (err != null) {
             sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
             return;
         }
         broadcastState(room);
@@ -180,9 +219,16 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleUndoReject(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
         String err = room.rejectUndo(color);
         if (err != null) {
             sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
             return;
         }
         broadcastState(room);
@@ -190,9 +236,16 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void handleUndoCancel(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
         String err = room.cancelUndoRequest(color);
         if (err != null) {
             sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
             return;
         }
         broadcastState(room);
@@ -201,6 +254,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     /** 对局结束后任一方可申请重新开始（同房间） */
     private void handleReset(WebSocketSession session, GameRoom room) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
         room.getLock().lock();
         try {
             if (!room.isGameOver()) {
@@ -216,6 +270,12 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         } finally {
             room.getLock().unlock();
         }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
         broadcastState(room);
         maybePlayBot(room);
     }
@@ -223,7 +283,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     /**
      * 白方为数据库人机时：轮到白且非悔棋待定时代为落子。
      */
-    private void maybePlayBot(GameRoom room) {
+    public void maybePlayBot(GameRoom room) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
         if (!room.isWhiteIsBot() || room.isGameOver()) {
             return;
         }
@@ -246,6 +307,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         if (err != null) {
             return;
         }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            return;
+        }
         broadcastState(room);
         maybePlayBot(room);
     }
@@ -265,10 +330,17 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 room.setWhiteSession(null);
             }
         }
+        if (color == Stone.BLACK) {
+            room.setClusterBlackConnected(false);
+        } else if (!room.isWhiteIsBot()) {
+            room.setClusterWhiteConnected(false);
+        }
+        roomGameStateService.tryPersist(room);
+        roomSessionTracker.unregister(room.getRoomId());
         broadcastState(room);
     }
 
-    private void broadcastState(GameRoom room) {
+    public void broadcastState(GameRoom room) {
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
         if (bs != null && bs.isOpen()) {
@@ -305,10 +377,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             }
             n.put("matchRound", room.getMatchRound());
             n.put("yourColor", yourColor);
-            n.put("blackConnected", room.getBlackSession() != null && room.getBlackSession().isOpen());
+            boolean blackHere =
+                    (room.getBlackSession() != null && room.getBlackSession().isOpen())
+                            || room.isClusterBlackConnected();
+            n.put("blackConnected", blackHere);
             boolean whiteHere =
                     room.isWhiteIsBot()
-                            || (room.getWhiteSession() != null && room.getWhiteSession().isOpen());
+                            || (room.getWhiteSession() != null && room.getWhiteSession().isOpen())
+                            || room.isClusterWhiteConnected();
             n.put("whiteConnected", whiteHere);
             n.put("whiteIsBot", room.isWhiteIsBot());
             n.put("undoPending", room.isUndoPending());

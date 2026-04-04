@@ -6,23 +6,37 @@
     <resultMap id="RoomParticipantResult" type="com.gomoku.sync.domain.RoomParticipant">
         <result property="roomId" column="room_id"/>
         <result property="blackUserId" column="black_user_id"/>
+        <result property="blackToken" column="black_token"/>
         <result property="whiteUserId" column="white_user_id"/>
+        <result property="whiteToken" column="white_token"/>
+        <result property="whiteIsBot" column="white_is_bot"/>
+        <result property="botSearchDepthMin" column="bot_search_depth_min"/>
+        <result property="botSearchDepthMax" column="bot_search_depth_max"/>
     </resultMap>
 
     <insert id="insertBlack">
-        INSERT INTO room_participants (room_id, black_user_id)
-        VALUES (#{roomId}, #{blackUserId})
+        INSERT INTO room_participants (room_id, black_user_id, black_token)
+        VALUES (#{roomId}, #{blackUserId}, #{blackToken})
     </insert>
 
     <update id="updateWhite">
         UPDATE room_participants
-        SET white_user_id = #{whiteUserId}
+        SET white_user_id = #{whiteUserId}, white_token = #{whiteToken}
         WHERE room_id = #{roomId}
           AND white_user_id IS NULL
     </update>
 
+    <update id="updateBotMeta">
+        UPDATE room_participants
+        SET white_is_bot = #{whiteIsBot},
+            bot_search_depth_min = #{dmin},
+            bot_search_depth_max = #{dmax}
+        WHERE room_id = #{roomId}
+    </update>
+
     <select id="selectByRoomId" resultMap="RoomParticipantResult">
-        SELECT room_id, black_user_id, white_user_id
+        SELECT room_id, black_user_id, black_token, white_user_id, white_token,
+               white_is_bot, bot_search_depth_min, bot_search_depth_max
         FROM room_participants
         WHERE room_id = #{roomId}
         LIMIT 1
