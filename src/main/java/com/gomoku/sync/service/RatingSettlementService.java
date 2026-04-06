@@ -1,9 +1,11 @@
 package com.gomoku.sync.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gomoku.sync.api.dto.SettleGameRequest;
 import com.gomoku.sync.api.dto.SettleGameResponse;
 import com.gomoku.sync.domain.GameRecord;
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.domain.GameRoomStateSnapshot;
 import com.gomoku.sync.domain.RatingChangeLog;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.User;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Objects;
 
 @Service
@@ -35,18 +38,24 @@ public class RatingSettlementService {
     private final RatingChangeLogMapper ratingChangeLogMapper;
     private final UserMapper userMapper;
     private final RoomService roomService;
+    private final RoomGameStateService roomGameStateService;
+    private final ObjectMapper objectMapper;
 
     public RatingSettlementService(
             RoomParticipantMapper roomParticipantMapper,
             GameMapper gameMapper,
             RatingChangeLogMapper ratingChangeLogMapper,
             UserMapper userMapper,
-            RoomService roomService) {
+            RoomService roomService,
+            RoomGameStateService roomGameStateService,
+            ObjectMapper objectMapper) {
         this.roomParticipantMapper = roomParticipantMapper;
         this.gameMapper = gameMapper;
         this.ratingChangeLogMapper = ratingChangeLogMapper;
         this.userMapper = userMapper;
         this.roomService = roomService;
+        this.roomGameStateService = roomGameStateService;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -226,12 +235,46 @@ public class RatingSettlementService {
         game.setWhiteEloAfter(whiteEloAfter);
         game.setBlackEloDelta(blackDeltaAct);
         game.setWhiteEloDelta(whiteDeltaAct);
+        game.setMovesJson(resolveMovesJson(req, matchRound, steps));
         gameMapper.insert(game);
+        long gameId = game.getId() != null ? game.getId() : 0L;
 
         insertLog(blackId, whiteId, req.getRoomId(), blackEloBefore, blackEloAfter, blackDeltaAct, steps, runaway && Objects.equals(runawayUid, blackId));
         insertLog(whiteId, blackId, req.getRoomId(), whiteEloBefore, whiteEloAfter, whiteDeltaAct, steps, runaway && Objects.equals(runawayUid, whiteId));
 
-        return new SettleGameResponse(blackEloAfter, whiteEloAfter, blackDeltaAct, whiteDeltaAct);
+        return new SettleGameResponse(gameId, blackEloAfter, whiteEloAfter, blackDeltaAct, whiteDeltaAct);
+    }
+
+    /**
+     * 优先从当前房间快照（含多实例 DB 同步）取手顺；否则使用请求体中的 {@link SettleGameRequest#getMoves()}。
+     */
+    private String resolveMovesJson(SettleGameRequest req, int matchRound, int totalSteps) {
+        if (totalSteps == 0) {
+            return null;
+        }
+        GameRoom live = roomService.getRoom(req.getRoomId());
+        if (live != null) {
+            roomGameStateService.syncRoomFromDbIfBehind(live);
+        }
+        if (live != null && live.getMatchRound() == matchRound) {
+            List<GameRoomStateSnapshot.MoveRecord> fromRoom = live.toStateSnapshot().getMoves();
+            if (fromRoom != null && fromRoom.size() == totalSteps) {
+                try {
+                    return objectMapper.writeValueAsString(fromRoom);
+                } catch (Exception e) {
+                    throw new IllegalStateException("序列化棋谱失败", e);
+                }
+            }
+        }
+        if (req.getMoves() != null && req.getMoves().size() == totalSteps) {
+            try {
+                return objectMapper.writeValueAsString(req.getMoves());
+            } catch (Exception e) {
+                throw new IllegalStateException("序列化棋谱失败", e);
+            }
+        }
+        throw new IllegalArgumentException(
+                "无法保存回放：totalSteps 与棋谱手数不一致。请在结算请求中传入 moves（长度须等于 totalSteps），或确保房间状态已同步。");
     }
 
     private static int extraRunawayPenalty(User loser) {

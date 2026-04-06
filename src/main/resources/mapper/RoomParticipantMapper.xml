@@ -12,6 +12,7 @@
         <result property="whiteIsBot" column="white_is_bot"/>
         <result property="botSearchDepthMin" column="bot_search_depth_min"/>
         <result property="botSearchDepthMax" column="bot_search_depth_max"/>
+        <result property="botAiStyle" column="bot_ai_style"/>
     </resultMap>
 
     <insert id="insertBlack">
@@ -39,13 +40,14 @@
         UPDATE room_participants
         SET white_is_bot = #{whiteIsBot},
             bot_search_depth_min = #{dmin},
-            bot_search_depth_max = #{dmax}
+            bot_search_depth_max = #{dmax},
+            bot_ai_style = #{botAiStyle}
         WHERE room_id = #{roomId}
     </update>
 
     <select id="selectByRoomId" resultMap="RoomParticipantResult">
         SELECT room_id, black_user_id, black_token, white_user_id, white_token,
-               white_is_bot, bot_search_depth_min, bot_search_depth_max
+               white_is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style
         FROM room_participants
         WHERE room_id = #{roomId}
         LIMIT 1

@@ -14,6 +14,8 @@ public class User {
     /** 仅 is_bot=1 有效：随机匹配时每步在 [min,max] 间随机 minimax 深度 */
     private int botSearchDepthMin = 2;
     private int botSearchDepthMax = 4;
+    /** 仅 is_bot=1 有效：棋风 ordinal；NULL 表示每局随机（见 BotAiStyle.resolveOrdinal） */
+    private Integer botAiStyle;
     private String unionid;
     private String nickname;
     private String avatarUrl;
@@ -75,6 +77,14 @@ public class User {
 
     public void setBotSearchDepthMax(int botSearchDepthMax) {
         this.botSearchDepthMax = botSearchDepthMax;
+    }
+
+    public Integer getBotAiStyle() {
+        return botAiStyle;
+    }
+
+    public void setBotAiStyle(Integer botAiStyle) {
+        this.botAiStyle = botAiStyle;
     }
 
     public String getUnionid() {

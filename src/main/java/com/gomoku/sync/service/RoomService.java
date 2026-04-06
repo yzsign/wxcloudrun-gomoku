@@ -1,5 +1,6 @@
 package com.gomoku.sync.service;
 
+import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
@@ -84,15 +85,21 @@ public class RoomService {
                     dmax = t;
                 }
                 room.setBotSearchDepthRange(dmin, dmax);
+                Integer style = rp.getBotAiStyle();
+                int ord =
+                        style != null
+                                ? style
+                                : BotAiStyle.forBotUserId(rp.getWhiteUserId()).ordinal();
+                room.setBotAiStyleOrdinal(ord);
             }
         }
         roomGameStateService.hydrateRoom(room);
         return room;
     }
 
-    /** 随机匹配人机入座后，将人机标记与搜索深度写入 DB，供其他实例加载 */
-    public void persistWhiteBotMeta(String roomId, int dmin, int dmax) {
-        roomParticipantMapper.updateBotMeta(roomId, true, dmin, dmax);
+    /** 随机匹配人机入座后，将人机标记、搜索深度与棋风写入 DB，供其他实例加载 */
+    public void persistWhiteBotMeta(String roomId, int dmin, int dmax, int botAiStyleOrdinal) {
+        roomParticipantMapper.updateBotMeta(roomId, true, dmin, dmax, botAiStyleOrdinal);
     }
 
     /** 从内存中移除房间（仅用于匹配取消等场景） */

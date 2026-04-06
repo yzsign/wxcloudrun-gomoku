@@ -19,6 +19,8 @@ public class GameRecord {
     private int whiteEloAfter;
     private int blackEloDelta;
     private int whiteEloDelta;
+    /** JSON 数组：[{r,c,color}, ...]，与 GameRoomStateSnapshot.MoveRecord 一致 */
+    private String movesJson;
 
     public Long getId() {
         return id;
@@ -130,5 +132,13 @@ public class GameRecord {
 
     public void setWhiteEloDelta(int whiteEloDelta) {
         this.whiteEloDelta = whiteEloDelta;
+    }
+
+    public String getMovesJson() {
+        return movesJson;
+    }
+
+    public void setMovesJson(String movesJson) {
+        this.movesJson = movesJson;
     }
 }

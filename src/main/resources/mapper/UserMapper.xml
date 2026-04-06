@@ -9,6 +9,7 @@
         <result property="bot" column="is_bot"/>
         <result property="botSearchDepthMin" column="bot_search_depth_min"/>
         <result property="botSearchDepthMax" column="bot_search_depth_max"/>
+        <result property="botAiStyle" column="bot_ai_style"/>
         <result property="unionid" column="unionid"/>
         <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar_url"/>
@@ -34,7 +35,7 @@
     </resultMap>
 
     <sql id="UserColumns">
-        id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, unionid, nickname, avatar_url,
+        id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style, unionid, nickname, avatar_url,
         elo_score, activity_points, consecutive_wins, consecutive_losses,
         today_net_change, elo_carry_over, last_rating_reset_date,
         runaway_count, total_games, win_count, draw_count, season_end_score,

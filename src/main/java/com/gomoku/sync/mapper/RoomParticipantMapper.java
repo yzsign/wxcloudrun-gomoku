@@ -27,7 +27,8 @@ public interface RoomParticipantMapper {
             @Param("roomId") String roomId,
             @Param("whiteIsBot") boolean whiteIsBot,
             @Param("dmin") int dmin,
-            @Param("dmax") int dmax);
+            @Param("dmax") int dmax,
+            @Param("botAiStyle") int botAiStyle);
 
     RoomParticipant selectByRoomId(@Param("roomId") String roomId);
 

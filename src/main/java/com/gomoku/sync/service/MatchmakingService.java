@@ -1,5 +1,6 @@
 package com.gomoku.sync.service;
 
+import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.api.dto.RandomMatchResponse;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.User;
@@ -149,8 +150,12 @@ public class MatchmakingService {
                 }
                 room.setBotSearchDepthRange(dmin, dmax);
             }
+            int styleOrd =
+                    BotAiStyle.resolveOrdinal(
+                            botUser != null ? botUser.getBotAiStyle() : null);
+            room.setBotAiStyleOrdinal(styleOrd);
             room.setWhiteIsBot(true);
-            roomService.persistWhiteBotMeta(roomId, dmin, dmax);
+            roomService.persistWhiteBotMeta(roomId, dmin, dmax, styleOrd);
             return FallbackBotOutcome.OK;
         }
     }

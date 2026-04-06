@@ -3,6 +3,7 @@ package com.gomoku.sync.websocket;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.Stone;
@@ -302,7 +303,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                         size,
                         Stone.WHITE,
                         GomokuAiEngine.nextBotSearchDepthInRange(
-                                room.getBotSearchDepthMin(), room.getBotSearchDepthMax()));
+                                room.getBotSearchDepthMin(), room.getBotSearchDepthMax()),
+                        BotAiStyle.fromOrdinal(room.getBotAiStyleOrdinal()));
         String err = room.tryMove(Stone.WHITE, mv[0], mv[1]);
         if (err != null) {
             return;

@@ -8,4 +8,8 @@ public interface GameMapper {
     int insert(GameRecord game);
 
     int countByRoomIdAndMatchRound(@Param("roomId") String roomId, @Param("matchRound") int matchRound);
+
+    GameRecord selectByRoomIdAndMatchRound(@Param("roomId") String roomId, @Param("matchRound") int matchRound);
+
+    GameRecord selectById(@Param("id") long id);
 }

@@ -10,7 +10,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 五子棋人机落子（必胜/必堵 + 候选裁剪 + minimax）。
- * 优化：仅扫描合法五连窗口评估、单步时间上限、深度收紧候选，降低 WS 线程阻塞。
+ * 支持 {@link BotAiStyle}：不同评估与排序权重，以及「多变」风格在相近最优解中随机。
  */
 public final class GomokuAiEngine {
 
@@ -29,6 +29,7 @@ public final class GomokuAiEngine {
     private static final int EFFECTIVE_DEPTH_CAP = 5;
 
     private static final ThreadLocal<Long> DEADLINE_NANOS = new ThreadLocal<>();
+    private static final ThreadLocal<BotAiStyle> AI_STYLE = new ThreadLocal<>();
 
     private GomokuAiEngine() {}
 
@@ -52,21 +53,36 @@ public final class GomokuAiEngine {
     }
 
     public static int[] chooseMove(int[][] board, int size, int aiColor) {
-        return chooseMove(board, size, aiColor, DEFAULT_SEARCH_DEPTH);
+        return chooseMove(board, size, aiColor, DEFAULT_SEARCH_DEPTH, BotAiStyle.BALANCED);
     }
 
     public static int[] chooseMove(int[][] board, int size, int aiColor, int searchDepth) {
+        return chooseMove(board, size, aiColor, searchDepth, BotAiStyle.BALANCED);
+    }
+
+    public static int[] chooseMove(
+            int[][] board, int size, int aiColor, int searchDepth, BotAiStyle style) {
+        if (style == null) {
+            style = BotAiStyle.BALANCED;
+        }
         if (searchDepth < 1) {
             searchDepth = 1;
         }
         searchDepth = Math.min(searchDepth, EFFECTIVE_DEPTH_CAP);
         long deadline = System.nanoTime() + MOVE_TIME_BUDGET_NANOS;
         DEADLINE_NANOS.set(deadline);
+        AI_STYLE.set(style);
         try {
             return chooseMoveInner(board, size, aiColor, searchDepth);
         } finally {
             DEADLINE_NANOS.remove();
+            AI_STYLE.remove();
         }
+    }
+
+    private static BotAiStyle style() {
+        BotAiStyle s = AI_STYLE.get();
+        return s != null ? s : BotAiStyle.BALANCED;
     }
 
     private static boolean timeUp() {
@@ -75,6 +91,7 @@ public final class GomokuAiEngine {
     }
 
     private static int[] chooseMoveInner(int[][] board, int size, int aiColor, int searchDepth) {
+        BotAiStyle st = style();
         int opp = opposite(aiColor);
         int stones = countStones(board, size);
         if (stones == 0) {
@@ -95,13 +112,13 @@ public final class GomokuAiEngine {
             return new int[]{size / 2, size / 2};
         }
 
-        cands.sort(Comparator.comparingInt(
-                (int[] m) -> -(scorePoint(board, size, m[0], m[1], aiColor)
-                        + scorePoint(board, size, m[0], m[1], opp))));
+        sortCandidates(board, size, cands, aiColor, opp, st);
 
         int cap = Math.min(MAX_CANDIDATES_ROOT, cands.size());
         cands = cands.subList(0, cap);
 
+        List<int[]> rootMoves = new ArrayList<>(cap);
+        List<Integer> rootScores = new ArrayList<>(cap);
         int bestR = cands.get(0)[0];
         int bestC = cands.get(0)[1];
         int bestScore = Integer.MIN_VALUE;
@@ -116,30 +133,64 @@ public final class GomokuAiEngine {
                 continue;
             }
             board[r][c] = aiColor;
-            int sc;
             if (WinChecker.checkWin(board, size, r, c, aiColor)) {
                 board[r][c] = Stone.EMPTY;
                 return new int[]{r, c};
             }
-            sc = minimax(
-                    board,
-                    size,
-                    plyDepth,
-                    false,
-                    aiColor,
-                    opp,
-                    Integer.MIN_VALUE,
-                    Integer.MAX_VALUE,
-                    searchDepth,
-                    1);
+            int sc =
+                    minimax(
+                            board,
+                            size,
+                            plyDepth,
+                            false,
+                            aiColor,
+                            opp,
+                            Integer.MIN_VALUE,
+                            Integer.MAX_VALUE,
+                            searchDepth,
+                            1);
             board[r][c] = Stone.EMPTY;
+            rootMoves.add(m);
+            rootScores.add(sc);
             if (sc > bestScore) {
                 bestScore = sc;
                 bestR = r;
                 bestC = c;
             }
         }
+        if (rootMoves.isEmpty()) {
+            return new int[]{bestR, bestC};
+        }
+        if (st.isRootRandomAmongNearBest() && rootScores.size() > 1) {
+            int margin = st.getNearBestScoreMargin();
+            List<int[]> pool = new ArrayList<>();
+            for (int i = 0; i < rootScores.size(); i++) {
+                if (rootScores.get(i) >= bestScore - margin) {
+                    pool.add(rootMoves.get(i));
+                }
+            }
+            if (!pool.isEmpty()) {
+                int[] pick = pool.get(ThreadLocalRandom.current().nextInt(pool.size()));
+                return new int[]{pick[0], pick[1]};
+            }
+        }
         return new int[]{bestR, bestC};
+    }
+
+    private static void sortCandidates(
+            int[][] board,
+            int size,
+            List<int[]> cands,
+            int aiColor,
+            int opp,
+            BotAiStyle st) {
+        double wm = st.getOrderMyW();
+        double wo = st.getOrderOppW();
+        cands.sort(
+                Comparator.comparingDouble(
+                        (int[] m) ->
+                                -(wm * scorePoint(board, size, m[0], m[1], aiColor)
+                                        + wo * scorePoint(board, size, m[0], m[1], opp))));
     }
 
     private static int maxCandForDepth(int depthRemaining) {
@@ -163,20 +214,19 @@ public final class GomokuAiEngine {
             int beta,
             int rootSearchDepth,
             int depthFromRoot) {
+        BotAiStyle st = style();
         if (timeUp()) {
-            return evaluateBoard(board, size, aiColor);
+            return evaluateBoard(board, size, aiColor, st);
         }
         if (depth == 0) {
-            return evaluateBoard(board, size, aiColor);
+            return evaluateBoard(board, size, aiColor, st);
         }
         int turn = maximizing ? aiColor : opp;
         List<int[]> cands = getCandidates(board, size);
         if (cands.isEmpty()) {
-            return evaluateBoard(board, size, aiColor);
+            return evaluateBoard(board, size, aiColor, st);
         }
-        cands.sort(Comparator.comparingInt(
-                (int[] m) -> -(scorePoint(board, size, m[0], m[1], aiColor)
-                        + scorePoint(board, size, m[0], m[1], opp))));
+        sortCandidates(board, size, cands, aiColor, opp, st);
         int cap = Math.min(maxCandForDepth(depth), cands.size());
         cands = cands.subList(0, cap);
 
@@ -184,7 +234,7 @@ public final class GomokuAiEngine {
             int maxEval = Integer.MIN_VALUE;
             for (int[] m : cands) {
                 if (timeUp()) {
-                    return evaluateBoard(board, size, aiColor);
+                    return evaluateBoard(board, size, aiColor, st);
                 }
                 int r = m[0];
                 int c = m[1];
@@ -198,17 +248,18 @@ public final class GomokuAiEngine {
                 } else if (WinChecker.boardFull(board, size)) {
                     ev = 0;
                 } else {
-                    ev = minimax(
-                            board,
-                            size,
-                            depth - 1,
-                            false,
-                            aiColor,
-                            opp,
-                            alpha,
-                            beta,
-                            rootSearchDepth,
-                            depthFromRoot + 1);
+                    ev =
+                            minimax(
+                                    board,
+                                    size,
+                                    depth - 1,
+                                    false,
+                                    aiColor,
+                                    opp,
+                                    alpha,
+                                    beta,
+                                    rootSearchDepth,
+                                    depthFromRoot + 1);
                 }
                 board[r][c] = Stone.EMPTY;
                 maxEval = Math.max(maxEval, ev);
@@ -222,7 +273,7 @@ public final class GomokuAiEngine {
         int minEval = Integer.MAX_VALUE;
         for (int[] m : cands) {
             if (timeUp()) {
-                return evaluateBoard(board, size, aiColor);
+                return evaluateBoard(board, size, aiColor, st);
             }
             int r = m[0];
             int c = m[1];
@@ -236,17 +287,18 @@ public final class GomokuAiEngine {
             } else if (WinChecker.boardFull(board, size)) {
                 ev = 0;
             } else {
-                ev = minimax(
-                        board,
-                        size,
-                        depth - 1,
-                        true,
-                        aiColor,
-                        opp,
-                        alpha,
-                        beta,
-                        rootSearchDepth,
-                        depthFromRoot + 1);
+                ev =
+                        minimax(
+                                board,
+                                size,
+                                depth - 1,
+                                true,
+                                aiColor,
+                                opp,
+                                alpha,
+                                beta,
+                                rootSearchDepth,
+                                depthFromRoot + 1);
             }
             board[r][c] = Stone.EMPTY;
             minEval = Math.min(minEval, ev);
@@ -261,36 +313,44 @@ public final class GomokuAiEngine {
     /**
      * 只遍历四个方向上「合法五连起点」的窗口，等价于原全棋盘逐格评估但调用量更少。
      */
-    private static int evaluateBoard(int[][] board, int size, int aiColor) {
+    private static int evaluateBoard(int[][] board, int size, int aiColor, BotAiStyle st) {
         int opp = opposite(aiColor);
-        int s = 0;
+        double em = st.getEvalMyW();
+        double eo = st.getEvalOppW();
+        double s = 0;
         int r;
         int c;
         for (r = 0; r < size; r++) {
             for (c = 0; c <= size - 5; c++) {
-                s += lineScore(board, size, r, c, 0, 1, aiColor);
-                s -= lineScore(board, size, r, c, 0, 1, opp);
+                s += em * lineScore(board, size, r, c, 0, 1, aiColor);
+                s -= eo * lineScore(board, size, r, c, 0, 1, opp);
             }
         }
         for (c = 0; c < size; c++) {
             for (r = 0; r <= size - 5; r++) {
-                s += lineScore(board, size, r, c, 1, 0, aiColor);
-                s -= lineScore(board, size, r, c, 1, 0, opp);
+                s += em * lineScore(board, size, r, c, 1, 0, aiColor);
+                s -= eo * lineScore(board, size, r, c, 1, 0, opp);
             }
         }
         for (r = 0; r <= size - 5; r++) {
             for (c = 0; c <= size - 5; c++) {
-                s += lineScore(board, size, r, c, 1, 1, aiColor);
-                s -= lineScore(board, size, r, c, 1, 1, opp);
+                s += em * lineScore(board, size, r, c, 1, 1, aiColor);
+                s -= eo * lineScore(board, size, r, c, 1, 1, opp);
             }
         }
         for (r = 0; r <= size - 5; r++) {
             for (c = 4; c < size; c++) {
-                s += lineScore(board, size, r, c, 1, -1, aiColor);
-                s -= lineScore(board, size, r, c, 1, -1, opp);
+                s += em * lineScore(board, size, r, c, 1, -1, aiColor);
+                s -= eo * lineScore(board, size, r, c, 1, -1, opp);
             }
         }
-        return s;
+        if (s > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        if (s < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        return (int) Math.round(s);
     }
 
     private static int lineScore(int[][] board, int size, int r, int c, int dr, int dc, int color) {

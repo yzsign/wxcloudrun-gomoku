@@ -13,6 +13,8 @@ public class RoomParticipant {
     private boolean whiteIsBot;
     private Integer botSearchDepthMin;
     private Integer botSearchDepthMax;
+    /** 人机棋风，见 BotAiStyle.ordinal；NULL 表示由 white_user_id 推导 */
+    private Integer botAiStyle;
 
     public String getRoomId() {
         return roomId;
@@ -76,5 +78,13 @@ public class RoomParticipant {
 
     public void setBotSearchDepthMax(Integer botSearchDepthMax) {
         this.botSearchDepthMax = botSearchDepthMax;
+    }
+
+    public Integer getBotAiStyle() {
+        return botAiStyle;
+    }
+
+    public void setBotAiStyle(Integer botAiStyle) {
+        this.botAiStyle = botAiStyle;
     }
 }

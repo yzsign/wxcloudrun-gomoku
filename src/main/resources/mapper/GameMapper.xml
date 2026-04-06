@@ -6,13 +6,29 @@
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         INSERT INTO games (room_id, match_round, black_user_id, white_user_id, total_steps, outcome, runaway_user_id,
                            black_elo_before, white_elo_before, black_elo_after, white_elo_after,
-                           black_elo_delta, white_elo_delta)
+                           black_elo_delta, white_elo_delta, moves_json)
         VALUES (#{roomId}, #{matchRound}, #{blackUserId}, #{whiteUserId}, #{totalSteps}, #{outcome}, #{runawayUserId,jdbcType=BIGINT},
                 #{blackEloBefore}, #{whiteEloBefore}, #{blackEloAfter}, #{whiteEloAfter},
-                #{blackEloDelta}, #{whiteEloDelta})
+                #{blackEloDelta}, #{whiteEloDelta}, #{movesJson,jdbcType=LONGVARCHAR})
     </insert>
 
     <select id="countByRoomIdAndMatchRound" resultType="int">
         SELECT COUNT(*) FROM games WHERE room_id = #{roomId} AND match_round = #{matchRound}
+    </select>
+
+    <select id="selectByRoomIdAndMatchRound" resultType="com.gomoku.sync.domain.GameRecord">
+        SELECT id, room_id, match_round, black_user_id, white_user_id, total_steps, outcome, runaway_user_id,
+               black_elo_before, white_elo_before, black_elo_after, white_elo_after,
+               black_elo_delta, white_elo_delta, moves_json
+        FROM games
+        WHERE room_id = #{roomId} AND match_round = #{matchRound}
+    </select>
+
+    <select id="selectById" resultType="com.gomoku.sync.domain.GameRecord">
+        SELECT id, room_id, match_round, black_user_id, white_user_id, total_steps, outcome, runaway_user_id,
+               black_elo_before, white_elo_before, black_elo_after, white_elo_after,
+               black_elo_delta, white_elo_delta, moves_json
+        FROM games
+        WHERE id = #{id}
     </select>
 </mapper>

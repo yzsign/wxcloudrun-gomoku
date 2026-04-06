@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `is_bot` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=人机账号',
   `bot_search_depth_min` INT UNSIGNED NOT NULL DEFAULT 2 COMMENT '人机：minimax 深度下限（含）',
   `bot_search_depth_max` INT UNSIGNED NOT NULL DEFAULT 4 COMMENT '人机：minimax 深度上限（含）',
+  `bot_ai_style` TINYINT UNSIGNED NULL COMMENT '人机棋风 BotAiStyle.ordinal，NULL=每局随机',
   `unionid` VARCHAR(64) DEFAULT NULL,
   `nickname` VARCHAR(64) DEFAULT NULL,
   `avatar_url` VARCHAR(512) DEFAULT NULL,
