@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.UserEquippedCosmeticMapper">
+
+    <select id="selectByUserId" resultType="com.gomoku.sync.domain.UserEquippedCosmetic">
+        SELECT category, item_id AS itemId
+        FROM user_equipped_cosmetics
+        WHERE user_id = #{userId}
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO user_equipped_cosmetics (user_id, category, item_id)
+        VALUES (#{userId}, #{category}, #{itemId})
+        ON DUPLICATE KEY UPDATE item_id = VALUES(item_id)
+    </insert>
+</mapper>

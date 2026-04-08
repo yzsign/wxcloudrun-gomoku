@@ -7,6 +7,9 @@ import com.gomoku.sync.api.dto.UserRatingResponse;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserCheckinState;
 import com.gomoku.sync.mapper.UserCheckinMapper;
+import com.gomoku.sync.domain.CosmeticCategory;
+import com.gomoku.sync.domain.UserEquippedCosmetic;
+import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.mapper.UserPieceSkinUnlockMapper;
 import com.gomoku.sync.service.SessionJwtService;
@@ -28,6 +31,7 @@ public class UserRatingController {
     private final UserMapper userMapper;
     private final UserCheckinMapper userCheckinMapper;
     private final UserPieceSkinUnlockMapper userPieceSkinUnlockMapper;
+    private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
     private final SessionJwtService sessionJwtService;
     private final ObjectMapper objectMapper;
 
@@ -35,11 +39,13 @@ public class UserRatingController {
             UserMapper userMapper,
             UserCheckinMapper userCheckinMapper,
             UserPieceSkinUnlockMapper userPieceSkinUnlockMapper,
+            UserEquippedCosmeticMapper userEquippedCosmeticMapper,
             SessionJwtService sessionJwtService,
             ObjectMapper objectMapper) {
         this.userMapper = userMapper;
         this.userCheckinMapper = userCheckinMapper;
         this.userPieceSkinUnlockMapper = userPieceSkinUnlockMapper;
+        this.userEquippedCosmeticMapper = userEquippedCosmeticMapper;
         this.sessionJwtService = sessionJwtService;
         this.objectMapper = objectMapper;
     }
@@ -77,6 +83,19 @@ public class UserRatingController {
         int checkinStreak = cs != null ? cs.getStreak() : 0;
         boolean tuanUnlocked = cs != null && cs.isPieceSkinTuanMoeUnlocked();
         List<String> pieceSkinIds = userPieceSkinUnlockMapper.selectSkinIdsByUserId(uid.get());
+        String pieceSlot = null;
+        String themeSlot = null;
+        for (UserEquippedCosmetic row : userEquippedCosmeticMapper.selectByUserId(uid.get())) {
+            if (row == null || row.getCategory() == null) {
+                continue;
+            }
+            if (CosmeticCategory.PIECE_SKIN.equals(row.getCategory())) {
+                pieceSlot = row.getItemId();
+            } else if (CosmeticCategory.THEME.equals(row.getCategory())) {
+                themeSlot = row.getItemId();
+            }
+        }
+        String pieceSkinOut = pieceSlot != null && !pieceSlot.isEmpty() ? pieceSlot : u.getPieceSkinId();
         UserRatingResponse body = new UserRatingResponse(
                 u.getId().longValue(),
                 u.getEloScore(),
@@ -98,7 +117,8 @@ public class UserRatingController {
                 checkinHist,
                 tuanUnlocked,
                 pieceSkinIds,
-                u.getPieceSkinId());
+                pieceSkinOut,
+                themeSlot);
         return ResponseEntity.ok(body);
     }
 }

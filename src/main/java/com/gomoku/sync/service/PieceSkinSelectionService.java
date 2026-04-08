@@ -1,9 +1,11 @@
 package com.gomoku.sync.service;
 
 import com.gomoku.sync.api.dto.PieceSkinSelectResponse;
+import com.gomoku.sync.domain.CosmeticCategory;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserCheckinState;
 import com.gomoku.sync.mapper.UserCheckinMapper;
+import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.mapper.UserPieceSkinUnlockMapper;
 import org.springframework.stereotype.Service;
@@ -35,14 +37,17 @@ public class PieceSkinSelectionService {
     private final UserMapper userMapper;
     private final UserCheckinMapper userCheckinMapper;
     private final UserPieceSkinUnlockMapper userPieceSkinUnlockMapper;
+    private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
 
     public PieceSkinSelectionService(
             UserMapper userMapper,
             UserCheckinMapper userCheckinMapper,
-            UserPieceSkinUnlockMapper userPieceSkinUnlockMapper) {
+            UserPieceSkinUnlockMapper userPieceSkinUnlockMapper,
+            UserEquippedCosmeticMapper userEquippedCosmeticMapper) {
         this.userMapper = userMapper;
         this.userCheckinMapper = userCheckinMapper;
         this.userPieceSkinUnlockMapper = userPieceSkinUnlockMapper;
+        this.userEquippedCosmeticMapper = userEquippedCosmeticMapper;
     }
 
     public static boolean isSelectableSkinId(String skinId) {
@@ -65,6 +70,7 @@ public class PieceSkinSelectionService {
         if (!canWear(userId, skinId)) {
             return SelectionResult.notUnlocked();
         }
+        userEquippedCosmeticMapper.upsert(userId, CosmeticCategory.PIECE_SKIN, skinId);
         userMapper.updatePieceSkinId(userId, skinId);
         return SelectionResult.ok(new PieceSkinSelectResponse(skinId));
     }

@@ -32,8 +32,10 @@ public class UserRatingResponse {
     private final Boolean tuanMoeUnlocked;
     /** 本人 /api/me/rating 专用：已解锁的积分/活动棋子皮肤 id 列表 */
     private final List<String> pieceSkinUnlockedIds;
-    /** 本人 /api/me/rating 专用：当前佩戴棋子皮肤（users.piece_skin_id） */
+    /** 本人 /api/me/rating 专用：当前佩戴棋子皮肤（与装备槽 PIECE_SKIN 一致） */
     private final String pieceSkinId;
+    /** 本人 /api/me/rating 专用：当前界面棋盘主题（装备槽 THEME；未设置时不输出，客户端默认檀木） */
+    private final String themeId;
 
     public UserRatingResponse(
             long userId,
@@ -61,6 +63,7 @@ public class UserRatingResponse {
                 lowTrust,
                 placementFairGames,
                 newbieMatchGames,
+                null,
                 null,
                 null,
                 null,
@@ -142,6 +145,7 @@ public class UserRatingResponse {
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -166,7 +170,8 @@ public class UserRatingResponse {
             List<String> checkinHistory,
             Boolean tuanMoeUnlocked,
             List<String> pieceSkinUnlockedIds,
-            String pieceSkinId) {
+            String pieceSkinId,
+            String themeId) {
         this.userId = userId;
         this.eloScore = eloScore;
         this.activityPoints = activityPoints;
@@ -188,6 +193,7 @@ public class UserRatingResponse {
         this.tuanMoeUnlocked = tuanMoeUnlocked;
         this.pieceSkinUnlockedIds = pieceSkinUnlockedIds;
         this.pieceSkinId = pieceSkinId;
+        this.themeId = themeId;
     }
 
     public long getUserId() {
@@ -272,5 +278,9 @@ public class UserRatingResponse {
 
     public String getPieceSkinId() {
         return pieceSkinId;
+    }
+
+    public String getThemeId() {
+        return themeId;
     }
 }
