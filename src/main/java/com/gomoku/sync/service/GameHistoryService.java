@@ -52,6 +52,8 @@ public class GameHistoryService {
         if (av != null && av.trim().isEmpty()) {
             av = null;
         }
+        long opponentUserId =
+                userId == r.getBlackUserId() ? r.getWhiteUserId() : r.getBlackUserId();
         return new GameHistoryItemResponse(
                 r.getId() != null ? r.getId() : 0L,
                 r.getRoomId(),
@@ -61,6 +63,7 @@ public class GameHistoryService {
                 r.isOpponentBot(),
                 av,
                 r.getOpponentGender(),
+                opponentUserId,
                 myResult,
                 r.getTotalSteps());
     }
