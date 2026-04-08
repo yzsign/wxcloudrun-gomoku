@@ -32,6 +32,8 @@ public class UserRatingResponse {
     private final Boolean tuanMoeUnlocked;
     /** 本人 /api/me/rating 专用：已解锁的积分/活动棋子皮肤 id 列表 */
     private final List<String> pieceSkinUnlockedIds;
+    /** 本人 /api/me/rating 专用：当前佩戴棋子皮肤（users.piece_skin_id） */
+    private final String pieceSkinId;
 
     public UserRatingResponse(
             long userId,
@@ -59,6 +61,7 @@ public class UserRatingResponse {
                 lowTrust,
                 placementFairGames,
                 newbieMatchGames,
+                null,
                 null,
                 null,
                 null,
@@ -138,6 +141,7 @@ public class UserRatingResponse {
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -161,7 +165,8 @@ public class UserRatingResponse {
             Integer checkinStreak,
             List<String> checkinHistory,
             Boolean tuanMoeUnlocked,
-            List<String> pieceSkinUnlockedIds) {
+            List<String> pieceSkinUnlockedIds,
+            String pieceSkinId) {
         this.userId = userId;
         this.eloScore = eloScore;
         this.activityPoints = activityPoints;
@@ -182,6 +187,7 @@ public class UserRatingResponse {
         this.checkinHistory = checkinHistory;
         this.tuanMoeUnlocked = tuanMoeUnlocked;
         this.pieceSkinUnlockedIds = pieceSkinUnlockedIds;
+        this.pieceSkinId = pieceSkinId;
     }
 
     public long getUserId() {
@@ -262,5 +268,9 @@ public class UserRatingResponse {
 
     public List<String> getPieceSkinUnlockedIds() {
         return pieceSkinUnlockedIds;
+    }
+
+    public String getPieceSkinId() {
+        return pieceSkinId;
     }
 }

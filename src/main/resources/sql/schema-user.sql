@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `nickname` VARCHAR(64) DEFAULT NULL,
   `avatar_url` VARCHAR(512) DEFAULT NULL,
   `gender` TINYINT UNSIGNED NULL DEFAULT NULL COMMENT '微信 gender：0未知 1男 2女；NULL=从未上报',
+  `piece_skin_id` VARCHAR(32) NULL DEFAULT NULL COMMENT '当前佩戴棋子皮肤 id，与客户端一致',
   `elo_score` INT NOT NULL DEFAULT 1200 COMMENT '天梯分',
   `activity_points` INT NOT NULL DEFAULT 0,
   `consecutive_wins` INT NOT NULL DEFAULT 0,

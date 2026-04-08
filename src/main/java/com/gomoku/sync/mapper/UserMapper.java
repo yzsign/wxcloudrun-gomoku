@@ -19,6 +19,9 @@ public interface UserMapper {
 
     int updateActivityPoints(User user);
 
+    /** 当前佩戴棋子皮肤（须业务层校验已解锁） */
+    int updatePieceSkinId(@Param("id") long id, @Param("pieceSkinId") String pieceSkinId);
+
     /** 随机匹配人机：从 is_bot=1 的用户中任选其一 */
     Long selectRandomBotId();
 }

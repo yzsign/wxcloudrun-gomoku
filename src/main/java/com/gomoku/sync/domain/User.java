@@ -21,6 +21,8 @@ public class User {
     private String avatarUrl;
     /** 微信 userInfo.gender：0 未知 1 男 2 女；null 表示从未上报 */
     private Integer gender;
+    /** 当前佩戴棋子皮肤 id（如 basic、tuan_moe、qingtao_libai）；null 表示未同步或未设置 */
+    private String pieceSkinId;
     private int eloScore = 1200;
     private int activityPoints;
     private int consecutiveWins;
@@ -119,6 +121,14 @@ public class User {
 
     public void setGender(Integer gender) {
         this.gender = gender;
+    }
+
+    public String getPieceSkinId() {
+        return pieceSkinId;
+    }
+
+    public void setPieceSkinId(String pieceSkinId) {
+        this.pieceSkinId = pieceSkinId;
     }
 
     public int getEloScore() {

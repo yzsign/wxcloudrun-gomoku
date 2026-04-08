@@ -97,7 +97,8 @@ public class UserRatingController {
                 checkinStreak,
                 checkinHist,
                 tuanUnlocked,
-                pieceSkinIds);
+                pieceSkinIds,
+                u.getPieceSkinId());
         return ResponseEntity.ok(body);
     }
 }

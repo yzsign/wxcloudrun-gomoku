@@ -14,6 +14,7 @@
         <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar_url"/>
         <result property="gender" column="gender"/>
+        <result property="pieceSkinId" column="piece_skin_id"/>
         <result property="eloScore" column="elo_score"/>
         <result property="activityPoints" column="activity_points"/>
         <result property="consecutiveWins" column="consecutive_wins"/>
@@ -36,7 +37,7 @@
     </resultMap>
 
     <sql id="UserColumns">
-        id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style, unionid, nickname, avatar_url, gender,
+        id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style, unionid, nickname, avatar_url, gender, piece_skin_id,
         elo_score, activity_points,
         consecutive_wins, consecutive_losses,
         today_net_change, elo_carry_over, last_rating_reset_date,
@@ -110,6 +111,12 @@
     <update id="updateActivityPoints">
         UPDATE users
         SET activity_points = #{activityPoints}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updatePieceSkinId">
+        UPDATE users
+        SET piece_skin_id = #{pieceSkinId,jdbcType=VARCHAR}
         WHERE id = #{id}
     </update>
 </mapper>
