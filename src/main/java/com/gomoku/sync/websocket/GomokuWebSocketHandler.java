@@ -21,6 +21,11 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class GomokuWebSocketHandler extends TextWebSocketHandler {
@@ -33,18 +38,26 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private final RoomSessionTracker roomSessionTracker;
     private final ObjectMapper objectMapper;
     private final SessionJwtService sessionJwtService;
+    private final ScheduledExecutorService botScheduler;
+    /** 人机落子延迟任务，同房间新调度会取消旧任务 */
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotMoves = new ConcurrentHashMap<>();
+    /** 人机对悔棋请求的延迟应答 */
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotUndoResponses =
+            new ConcurrentHashMap<>();
 
     public GomokuWebSocketHandler(
             RoomService roomService,
             RoomGameStateService roomGameStateService,
             RoomSessionTracker roomSessionTracker,
             ObjectMapper objectMapper,
-            SessionJwtService sessionJwtService) {
+            SessionJwtService sessionJwtService,
+            ScheduledExecutorService gomokuBotScheduler) {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
         this.roomSessionTracker = roomSessionTracker;
         this.objectMapper = objectMapper;
         this.sessionJwtService = sessionJwtService;
+        this.botScheduler = gomokuBotScheduler;
     }
 
     @Override
@@ -186,11 +199,15 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 && room.isUndoPending()
                 && room.getPendingUndoRequesterColor() != null
                 && room.getPendingUndoRequesterColor() == Stone.BLACK) {
-            String err2 = room.acceptUndo(Stone.WHITE);
-            if (err2 != null) {
+            if (!roomGameStateService.tryPersist(room)) {
+                roomGameStateService.forceReloadFromDb(room);
+                sendToSession(session, error("对局状态已同步，请重试"));
                 broadcastState(room);
                 return;
             }
+            broadcastState(room);
+            scheduleBotUndoResponse(room);
+            return;
         }
         if (!roomGameStateService.tryPersist(room)) {
             roomGameStateService.forceReloadFromDb(room);
@@ -238,6 +255,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleUndoCancel(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotUndoResponse(room.getRoomId());
         String err = room.cancelUndoRequest(color);
         if (err != null) {
             sendToSession(session, error(err));
@@ -256,6 +274,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     /** 对局结束后任一方可申请重新开始（同房间） */
     private void handleReset(WebSocketSession session, GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotTasks(room.getRoomId());
         room.getLock().lock();
         try {
             if (!room.isGameOver()) {
@@ -282,9 +301,46 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 白方为数据库人机时：轮到白且非悔棋待定时代为落子。
+     * 白方为数据库人机时：轮到白且非悔棋待定时代为落子；随机延迟 1~5 秒再落子。
      */
     public void maybePlayBot(GameRoom room) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (!room.isWhiteIsBot() || room.isGameOver()) {
+            return;
+        }
+        if (room.isUndoPending()) {
+            return;
+        }
+        if (room.getCurrent() != Stone.WHITE) {
+            return;
+        }
+        String roomId = room.getRoomId();
+        cancelPendingBotMove(roomId);
+        long delayMs = 1000L + ThreadLocalRandom.current().nextInt(4001);
+        ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
+        holder[0] =
+                botScheduler.schedule(
+                        () -> {
+                            try {
+                                if (holder[0].isCancelled()) {
+                                    return;
+                                }
+                                ScheduledFuture<?> current = pendingBotMoves.get(roomId);
+                                if (current != holder[0]) {
+                                    return;
+                                }
+                                playBotMoveIfStillValid(room);
+                            } finally {
+                                pendingBotMoves.remove(roomId, holder[0]);
+                            }
+                        },
+                        delayMs,
+                        TimeUnit.MILLISECONDS);
+        pendingBotMoves.put(roomId, holder[0]);
+    }
+
+    /** 立即执行人机落子（调用前已确认轮到白棋等条件）。 */
+    private void playBotMoveIfStillValid(GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
         if (!room.isWhiteIsBot() || room.isGameOver()) {
             return;
@@ -315,6 +371,76 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
         broadcastState(room);
         maybePlayBot(room);
+    }
+
+    /**
+     * 人机对黑方悔棋：延迟 1~3 秒后，70% 同意、30% 拒绝。
+     */
+    private void scheduleBotUndoResponse(GameRoom room) {
+        String roomId = room.getRoomId();
+        cancelPendingBotUndoResponse(roomId);
+        long delayMs = 1000L + ThreadLocalRandom.current().nextInt(2001);
+        ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
+        holder[0] =
+                botScheduler.schedule(
+                        () -> {
+                            try {
+                                if (holder[0].isCancelled()) {
+                                    return;
+                                }
+                                ScheduledFuture<?> current = pendingBotUndoResponses.get(roomId);
+                                if (current != holder[0]) {
+                                    return;
+                                }
+                                roomGameStateService.syncRoomFromDbIfBehind(room);
+                                if (!room.isWhiteIsBot()
+                                        || !room.isUndoPending()
+                                        || room.getPendingUndoRequesterColor() == null
+                                        || room.getPendingUndoRequesterColor() != Stone.BLACK) {
+                                    return;
+                                }
+                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                String err =
+                                        reject
+                                                ? room.rejectUndo(Stone.WHITE)
+                                                : room.acceptUndo(Stone.WHITE);
+                                if (err != null) {
+                                    broadcastState(room);
+                                    return;
+                                }
+                                if (!roomGameStateService.tryPersist(room)) {
+                                    roomGameStateService.forceReloadFromDb(room);
+                                    broadcastState(room);
+                                    return;
+                                }
+                                broadcastState(room);
+                                maybePlayBot(room);
+                            } finally {
+                                pendingBotUndoResponses.remove(roomId, holder[0]);
+                            }
+                        },
+                        delayMs,
+                        TimeUnit.MILLISECONDS);
+        pendingBotUndoResponses.put(roomId, holder[0]);
+    }
+
+    private void cancelPendingBotMove(String roomId) {
+        ScheduledFuture<?> f = pendingBotMoves.remove(roomId);
+        if (f != null) {
+            f.cancel(false);
+        }
+    }
+
+    private void cancelPendingBotUndoResponse(String roomId) {
+        ScheduledFuture<?> f = pendingBotUndoResponses.remove(roomId);
+        if (f != null) {
+            f.cancel(false);
+        }
+    }
+
+    private void cancelPendingBotTasks(String roomId) {
+        cancelPendingBotMove(roomId);
+        cancelPendingBotUndoResponse(roomId);
     }
 
     @Override
