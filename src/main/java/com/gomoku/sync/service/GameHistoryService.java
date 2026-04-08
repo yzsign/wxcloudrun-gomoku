@@ -48,6 +48,10 @@ public class GameHistoryService {
         Date ca = r.getCreatedAt();
         long endedAt = ca != null ? ca.getTime() : 0L;
         String myResult = resolveMyResult(userId, r.getBlackUserId(), r.getWhiteUserId(), r.getOutcome());
+        String av = r.getOpponentAvatarUrl();
+        if (av != null && av.trim().isEmpty()) {
+            av = null;
+        }
         return new GameHistoryItemResponse(
                 r.getId() != null ? r.getId() : 0L,
                 r.getRoomId(),
@@ -55,6 +59,8 @@ public class GameHistoryService {
                 endedAt,
                 oppNick,
                 r.isOpponentBot(),
+                av,
+                r.getOpponentGender(),
                 myResult,
                 r.getTotalSteps());
     }

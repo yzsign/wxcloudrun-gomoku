@@ -24,7 +24,7 @@ public class AuthController {
     }
 
     /**
-     * 静默登录：body JSON { "code": "wx.login 返回的 code", "nickname": "可选", "avatarUrl": "可选" }
+     * 静默登录：body JSON { "code", "nickname?", "avatarUrl?", "gender?" }，gender 为微信 0/1/2
      */
     @PostMapping("/silent-login")
     public ResponseEntity<?> silentLogin(@RequestBody SilentLoginRequest body) {

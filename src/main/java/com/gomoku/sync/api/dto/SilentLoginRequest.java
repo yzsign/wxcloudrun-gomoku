@@ -8,6 +8,8 @@ public class SilentLoginRequest {
     private String code;
     private String nickname;
     private String avatarUrl;
+    /** 微信 userInfo.gender：0 未知 1 男 2 女（可选，上报后写入 users.gender） */
+    private Integer gender;
 
     public String getCode() {
         return code;
@@ -31,5 +33,13 @@ public class SilentLoginRequest {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public Integer getGender() {
+        return gender;
+    }
+
+    public void setGender(Integer gender) {
+        this.gender = gender;
     }
 }

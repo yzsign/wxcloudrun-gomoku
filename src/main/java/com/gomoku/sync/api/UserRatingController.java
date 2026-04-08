@@ -92,6 +92,7 @@ public class UserRatingController {
                 u.getNewbieMatchGames(),
                 nick != null && !nick.isEmpty() ? nick : null,
                 av != null && !av.isEmpty() ? av : null,
+                u.getGender(),
                 checkinLastYmd,
                 checkinStreak,
                 checkinHist,

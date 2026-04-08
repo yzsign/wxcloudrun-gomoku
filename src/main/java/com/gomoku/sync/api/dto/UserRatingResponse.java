@@ -23,6 +23,8 @@ public class UserRatingResponse {
     private final String nickname;
     /** 可选：头像 URL（与 users.avatar_url 一致，需下载域名白名单） */
     private final String avatarUrl;
+    /** 微信 gender：0 未知 1 男 2 女（users.gender；本人与对手接口均可填） */
+    private final Integer gender;
     /** 本人 /api/me/rating 专用；对手接口为 null 不输出 */
     private final String checkinLastYmd;
     private final Integer checkinStreak;
@@ -63,6 +65,7 @@ public class UserRatingResponse {
                 null,
                 null,
                 null,
+                null,
                 null);
     }
 
@@ -96,6 +99,41 @@ public class UserRatingResponse {
                 newbieMatchGames,
                 nickname,
                 avatarUrl,
+                null);
+    }
+
+    public UserRatingResponse(
+            long userId,
+            int eloScore,
+            int activityPoints,
+            int consecutiveWins,
+            int consecutiveLosses,
+            int totalGames,
+            int winCount,
+            int drawCount,
+            int runawayCount,
+            boolean lowTrust,
+            int placementFairGames,
+            int newbieMatchGames,
+            String nickname,
+            String avatarUrl,
+            Integer gender) {
+        this(
+                userId,
+                eloScore,
+                activityPoints,
+                consecutiveWins,
+                consecutiveLosses,
+                totalGames,
+                winCount,
+                drawCount,
+                runawayCount,
+                lowTrust,
+                placementFairGames,
+                newbieMatchGames,
+                nickname,
+                avatarUrl,
+                gender,
                 null,
                 null,
                 null,
@@ -118,6 +156,7 @@ public class UserRatingResponse {
             int newbieMatchGames,
             String nickname,
             String avatarUrl,
+            Integer gender,
             String checkinLastYmd,
             Integer checkinStreak,
             List<String> checkinHistory,
@@ -137,6 +176,7 @@ public class UserRatingResponse {
         this.newbieMatchGames = newbieMatchGames;
         this.nickname = nickname;
         this.avatarUrl = avatarUrl;
+        this.gender = gender;
         this.checkinLastYmd = checkinLastYmd;
         this.checkinStreak = checkinStreak;
         this.checkinHistory = checkinHistory;
@@ -198,6 +238,10 @@ public class UserRatingResponse {
 
     public String getAvatarUrl() {
         return avatarUrl;
+    }
+
+    public Integer getGender() {
+        return gender;
     }
 
     public String getCheckinLastYmd() {

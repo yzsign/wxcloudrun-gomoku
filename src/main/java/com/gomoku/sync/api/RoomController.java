@@ -158,7 +158,8 @@ public class RoomController {
                 u.getPlacementFairGames(),
                 u.getNewbieMatchGames(),
                 nick != null && !nick.isEmpty() ? nick : null,
-                av != null && !av.isEmpty() ? av : null);
+                av != null && !av.isEmpty() ? av : null,
+                u.getGender());
         return ResponseEntity.ok(body);
     }
 }

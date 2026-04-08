@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `unionid` VARCHAR(64) DEFAULT NULL,
   `nickname` VARCHAR(64) DEFAULT NULL,
   `avatar_url` VARCHAR(512) DEFAULT NULL,
+  `gender` TINYINT UNSIGNED NULL DEFAULT NULL COMMENT '微信 gender：0未知 1男 2女；NULL=从未上报',
   `elo_score` INT NOT NULL DEFAULT 1200 COMMENT '天梯分',
   `activity_points` INT NOT NULL DEFAULT 0,
   `consecutive_wins` INT NOT NULL DEFAULT 0,

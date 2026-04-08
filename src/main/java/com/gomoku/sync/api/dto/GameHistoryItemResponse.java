@@ -12,6 +12,10 @@ public class GameHistoryItemResponse {
     private long endedAt;
     private String opponentNickname;
     private boolean opponentBot;
+    /** 对手头像 URL，可能为空（人机或未设置） */
+    private String opponentAvatarUrl;
+    /** 对手性别：微信 0 未知 1 男 2 女；可能为 null（未上报） */
+    private Integer opponentGender;
     /** WIN | LOSS | DRAW */
     private String myResult;
     private int totalSteps;
@@ -23,6 +27,8 @@ public class GameHistoryItemResponse {
             long endedAt,
             String opponentNickname,
             boolean opponentBot,
+            String opponentAvatarUrl,
+            Integer opponentGender,
             String myResult,
             int totalSteps) {
         this.gameId = gameId;
@@ -31,6 +37,8 @@ public class GameHistoryItemResponse {
         this.endedAt = endedAt;
         this.opponentNickname = opponentNickname;
         this.opponentBot = opponentBot;
+        this.opponentAvatarUrl = opponentAvatarUrl;
+        this.opponentGender = opponentGender;
         this.myResult = myResult;
         this.totalSteps = totalSteps;
     }
@@ -57,6 +65,14 @@ public class GameHistoryItemResponse {
 
     public boolean isOpponentBot() {
         return opponentBot;
+    }
+
+    public String getOpponentAvatarUrl() {
+        return opponentAvatarUrl;
+    }
+
+    public Integer getOpponentGender() {
+        return opponentGender;
     }
 
     public String getMyResult() {

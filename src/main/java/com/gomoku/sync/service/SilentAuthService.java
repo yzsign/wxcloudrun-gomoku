@@ -38,6 +38,7 @@ public class SilentAuthService {
         }
 
         Date now = new Date();
+        Integer gender = normalizeWeChatGender(req.getGender());
         User existing = userMapper.selectByOpenid(wx.getOpenid());
         if (existing == null) {
             User u = new User();
@@ -45,6 +46,9 @@ public class SilentAuthService {
             u.setUnionid(wx.getUnionid());
             u.setNickname(req.getNickname());
             u.setAvatarUrl(req.getAvatarUrl());
+            if (gender != null) {
+                u.setGender(gender);
+            }
             u.setLastLoginAt(now);
             userMapper.insert(u);
             return new SilentLoginResponse(u.getId(), sessionJwtService.createToken(u.getId()));
@@ -59,8 +63,22 @@ public class SilentAuthService {
         if (req.getAvatarUrl() != null) {
             existing.setAvatarUrl(req.getAvatarUrl());
         }
+        if (gender != null) {
+            existing.setGender(gender);
+        }
         existing.setLastLoginAt(now);
         userMapper.updateByOpenid(existing);
         return new SilentLoginResponse(existing.getId(), sessionJwtService.createToken(existing.getId()));
+    }
+
+    /** 仅接受微信合法取值 0/1/2，其余忽略 */
+    private static Integer normalizeWeChatGender(Integer g) {
+        if (g == null) {
+            return null;
+        }
+        if (g == 0 || g == 1 || g == 2) {
+            return g;
+        }
+        return null;
     }
 }

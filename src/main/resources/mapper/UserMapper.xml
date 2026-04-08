@@ -13,6 +13,7 @@
         <result property="unionid" column="unionid"/>
         <result property="nickname" column="nickname"/>
         <result property="avatarUrl" column="avatar_url"/>
+        <result property="gender" column="gender"/>
         <result property="eloScore" column="elo_score"/>
         <result property="activityPoints" column="activity_points"/>
         <result property="consecutiveWins" column="consecutive_wins"/>
@@ -35,7 +36,7 @@
     </resultMap>
 
     <sql id="UserColumns">
-        id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style, unionid, nickname, avatar_url,
+        id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style, unionid, nickname, avatar_url, gender,
         elo_score, activity_points,
         consecutive_wins, consecutive_losses,
         today_net_change, elo_carry_over, last_rating_reset_date,
@@ -67,8 +68,8 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
-        INSERT INTO users (openid, unionid, nickname, avatar_url, last_login_at)
-        VALUES (#{openid}, #{unionid}, #{nickname}, #{avatarUrl}, #{lastLoginAt})
+        INSERT INTO users (openid, unionid, nickname, avatar_url, gender, last_login_at)
+        VALUES (#{openid}, #{unionid}, #{nickname}, #{avatarUrl}, #{gender,jdbcType=TINYINT}, #{lastLoginAt})
     </insert>
 
     <update id="updateByOpenid">
@@ -76,6 +77,7 @@
         SET unionid = #{unionid},
             nickname = #{nickname},
             avatar_url = #{avatarUrl},
+            gender = #{gender,jdbcType=TINYINT},
             last_login_at = #{lastLoginAt}
         WHERE openid = #{openid}
     </update>

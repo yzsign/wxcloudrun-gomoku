@@ -17,6 +17,9 @@ public class GameHistoryQueryRow {
     private long whiteUserId;
     private String opponentNickname;
     private boolean opponentBot;
+    private String opponentAvatarUrl;
+    /** 对手 users.gender：0 未知 1 男 2 女；可能为 null（旧数据或未上报） */
+    private Integer opponentGender;
 
     public Long getId() {
         return id;
@@ -96,5 +99,21 @@ public class GameHistoryQueryRow {
 
     public void setOpponentBot(boolean opponentBot) {
         this.opponentBot = opponentBot;
+    }
+
+    public String getOpponentAvatarUrl() {
+        return opponentAvatarUrl;
+    }
+
+    public void setOpponentAvatarUrl(String opponentAvatarUrl) {
+        this.opponentAvatarUrl = opponentAvatarUrl;
+    }
+
+    public Integer getOpponentGender() {
+        return opponentGender;
+    }
+
+    public void setOpponentGender(Integer opponentGender) {
+        this.opponentGender = opponentGender;
     }
 }

@@ -43,7 +43,9 @@
             g.black_user_id AS blackUserId,
             g.white_user_id AS whiteUserId,
             ou.nickname AS opponentNickname,
-            ou.is_bot AS opponentBot
+            ou.is_bot AS opponentBot,
+            ou.avatar_url AS opponentAvatarUrl,
+            ou.gender AS opponentGender
         FROM games g
         INNER JOIN users ou ON ou.id = (
             CASE WHEN g.black_user_id = #{userId} THEN g.white_user_id ELSE g.black_user_id END

@@ -19,6 +19,8 @@ public class User {
     private String unionid;
     private String nickname;
     private String avatarUrl;
+    /** 微信 userInfo.gender：0 未知 1 男 2 女；null 表示从未上报 */
+    private Integer gender;
     private int eloScore = 1200;
     private int activityPoints;
     private int consecutiveWins;
@@ -109,6 +111,14 @@ public class User {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public Integer getGender() {
+        return gender;
+    }
+
+    public void setGender(Integer gender) {
+        this.gender = gender;
     }
 
     public int getEloScore() {
