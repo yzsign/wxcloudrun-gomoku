@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.UserPieceSkinUnlockMapper">
+
+    <select id="countByUserIdAndSkinId" resultType="int">
+        SELECT COUNT(*)
+        FROM user_piece_skin_unlocks
+        WHERE user_id = #{userId} AND skin_id = #{skinId}
+    </select>
+
+    <select id="selectSkinIdsByUserId" resultType="java.lang.String">
+        SELECT skin_id
+        FROM user_piece_skin_unlocks
+        WHERE user_id = #{userId}
+    </select>
+
+    <insert id="insert">
+        INSERT INTO user_piece_skin_unlocks (user_id, skin_id, unlock_source, points_spent)
+        VALUES (#{userId}, #{skinId}, #{unlockSource}, #{pointsSpent})
+    </insert>
+</mapper>

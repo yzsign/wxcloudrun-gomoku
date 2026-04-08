@@ -8,6 +8,7 @@ import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserCheckinState;
 import com.gomoku.sync.mapper.UserCheckinMapper;
 import com.gomoku.sync.mapper.UserMapper;
+import com.gomoku.sync.mapper.UserPieceSkinUnlockMapper;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,16 +27,19 @@ public class UserRatingController {
 
     private final UserMapper userMapper;
     private final UserCheckinMapper userCheckinMapper;
+    private final UserPieceSkinUnlockMapper userPieceSkinUnlockMapper;
     private final SessionJwtService sessionJwtService;
     private final ObjectMapper objectMapper;
 
     public UserRatingController(
             UserMapper userMapper,
             UserCheckinMapper userCheckinMapper,
+            UserPieceSkinUnlockMapper userPieceSkinUnlockMapper,
             SessionJwtService sessionJwtService,
             ObjectMapper objectMapper) {
         this.userMapper = userMapper;
         this.userCheckinMapper = userCheckinMapper;
+        this.userPieceSkinUnlockMapper = userPieceSkinUnlockMapper;
         this.sessionJwtService = sessionJwtService;
         this.objectMapper = objectMapper;
     }
@@ -72,6 +76,7 @@ public class UserRatingController {
         String checkinLastYmd = cs != null ? cs.getLastCheckinYmd() : null;
         int checkinStreak = cs != null ? cs.getStreak() : 0;
         boolean tuanUnlocked = cs != null && cs.isPieceSkinTuanMoeUnlocked();
+        List<String> pieceSkinIds = userPieceSkinUnlockMapper.selectSkinIdsByUserId(uid.get());
         UserRatingResponse body = new UserRatingResponse(
                 u.getId().longValue(),
                 u.getEloScore(),
@@ -90,7 +95,8 @@ public class UserRatingController {
                 checkinLastYmd,
                 checkinStreak,
                 checkinHist,
-                tuanUnlocked);
+                tuanUnlocked,
+                pieceSkinIds);
         return ResponseEntity.ok(body);
     }
 }
