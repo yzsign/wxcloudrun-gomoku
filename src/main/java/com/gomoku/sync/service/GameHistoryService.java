@@ -25,11 +25,12 @@ public class GameHistoryService {
         this.gameMapper = gameMapper;
     }
 
-    public GameHistoryListResponse listPage(long userId, int limit, int offset) {
+    public GameHistoryListResponse listPage(long userId, int limit, int offset, String resultFilter) {
         int lim = Math.min(Math.max(limit, 1), MAX_PAGE);
         int off = Math.max(offset, 0);
         int fetch = lim + 1;
-        List<GameHistoryQueryRow> rows = gameMapper.selectHistoryForUser(userId, fetch, off);
+        String rf = normalizeResultFilter(resultFilter);
+        List<GameHistoryQueryRow> rows = gameMapper.selectHistoryForUser(userId, fetch, off, rf);
         boolean hasMore = rows.size() > lim;
         List<GameHistoryQueryRow> page = hasMore ? rows.subList(0, lim) : rows;
 
@@ -38,6 +39,21 @@ public class GameHistoryService {
             out.add(toItem(userId, r));
         }
         return new GameHistoryListResponse(out, hasMore);
+    }
+
+    /** @return null（全部）或 WIN / LOSS */
+    static String normalizeResultFilter(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String u = raw.trim().toUpperCase();
+        if (u.isEmpty()) {
+            return null;
+        }
+        if ("WIN".equals(u) || "LOSS".equals(u)) {
+            return u;
+        }
+        return null;
     }
 
     private static GameHistoryItemResponse toItem(long userId, GameHistoryQueryRow r) {

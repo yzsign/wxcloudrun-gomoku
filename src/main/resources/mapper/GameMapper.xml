@@ -57,6 +57,12 @@
                         FROM games g
                         INNER JOIN users ou ON ou.id = g.white_user_id
                         WHERE g.black_user_id = #{userId}
+                        <if test="resultFilter != null and resultFilter == 'WIN'">
+                            AND g.outcome = 'BLACK_WIN'
+                        </if>
+                        <if test="resultFilter != null and resultFilter == 'LOSS'">
+                            AND g.outcome = 'WHITE_WIN'
+                        </if>
                         ORDER BY g.created_at DESC
                         LIMIT #{limit}
                     )
@@ -78,6 +84,12 @@
                         FROM games g
                         INNER JOIN users ou ON ou.id = g.black_user_id
                         WHERE g.white_user_id = #{userId}
+                        <if test="resultFilter != null and resultFilter == 'WIN'">
+                            AND g.outcome = 'WHITE_WIN'
+                        </if>
+                        <if test="resultFilter != null and resultFilter == 'LOSS'">
+                            AND g.outcome = 'BLACK_WIN'
+                        </if>
                         ORDER BY g.created_at DESC
                         LIMIT #{limit}
                     )
@@ -103,6 +115,12 @@
                     FROM games g
                     INNER JOIN users ou ON ou.id = g.white_user_id
                     WHERE g.black_user_id = #{userId}
+                    <if test="resultFilter != null and resultFilter == 'WIN'">
+                        AND g.outcome = 'BLACK_WIN'
+                    </if>
+                    <if test="resultFilter != null and resultFilter == 'LOSS'">
+                        AND g.outcome = 'WHITE_WIN'
+                    </if>
                     UNION ALL
                     SELECT
                         g.id,
@@ -120,6 +138,12 @@
                     FROM games g
                     INNER JOIN users ou ON ou.id = g.black_user_id
                     WHERE g.white_user_id = #{userId}
+                    <if test="resultFilter != null and resultFilter == 'WIN'">
+                        AND g.outcome = 'WHITE_WIN'
+                    </if>
+                    <if test="resultFilter != null and resultFilter == 'LOSS'">
+                        AND g.outcome = 'BLACK_WIN'
+                    </if>
                 ) h
                 ORDER BY h.createdAt DESC
                 LIMIT #{limit} OFFSET #{offset}

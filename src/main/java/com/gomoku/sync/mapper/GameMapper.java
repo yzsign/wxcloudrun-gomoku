@@ -19,5 +19,6 @@ public interface GameMapper {
     List<GameHistoryQueryRow> selectHistoryForUser(
             @Param("userId") long userId,
             @Param("limit") int limit,
-            @Param("offset") int offset);
+            @Param("offset") int offset,
+            @Param("resultFilter") String resultFilter);
 }

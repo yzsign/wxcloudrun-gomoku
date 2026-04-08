@@ -3,8 +3,19 @@ package com.gomoku.sync.service;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class GameHistoryServiceTest {
+
+    @Test
+    void normalizeResultFilter() {
+        assertNull(GameHistoryService.normalizeResultFilter(null));
+        assertNull(GameHistoryService.normalizeResultFilter(""));
+        assertNull(GameHistoryService.normalizeResultFilter("  "));
+        assertNull(GameHistoryService.normalizeResultFilter("all"));
+        assertEquals("WIN", GameHistoryService.normalizeResultFilter("win"));
+        assertEquals("LOSS", GameHistoryService.normalizeResultFilter("LOSS"));
+    }
 
     @Test
     void resolveMyResult_blackWin() {

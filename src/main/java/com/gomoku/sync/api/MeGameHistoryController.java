@@ -34,13 +34,14 @@ public class MeGameHistoryController {
     public ResponseEntity<?> list(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "limit", defaultValue = "30") int limit,
-            @RequestParam(value = "offset", defaultValue = "0") int offset) {
+            @RequestParam(value = "offset", defaultValue = "0") int offset,
+            @RequestParam(value = "result", required = false) String result) {
         Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
         if (!uid.isPresent()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new ApiError("UNAUTHORIZED", "请先登录"));
         }
-        GameHistoryListResponse body = gameHistoryService.listPage(uid.get(), limit, offset);
+        GameHistoryListResponse body = gameHistoryService.listPage(uid.get(), limit, offset, result);
         return ResponseEntity.ok(body);
     }
 }
