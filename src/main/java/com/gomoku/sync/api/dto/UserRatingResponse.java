@@ -1,5 +1,10 @@
 package com.gomoku.sync.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
+import java.util.List;
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class UserRatingResponse {
 
     private final long userId;
@@ -18,6 +23,11 @@ public class UserRatingResponse {
     private final String nickname;
     /** 可选：头像 URL（与 users.avatar_url 一致，需下载域名白名单） */
     private final String avatarUrl;
+    /** 本人 /api/me/rating 专用；对手接口为 null 不输出 */
+    private final String checkinLastYmd;
+    private final Integer checkinStreak;
+    private final List<String> checkinHistory;
+    private final Boolean tuanMoeUnlocked;
 
     public UserRatingResponse(
             long userId,
@@ -46,6 +56,10 @@ public class UserRatingResponse {
                 placementFairGames,
                 newbieMatchGames,
                 null,
+                null,
+                null,
+                null,
+                null,
                 null);
     }
 
@@ -64,6 +78,46 @@ public class UserRatingResponse {
             int newbieMatchGames,
             String nickname,
             String avatarUrl) {
+        this(
+                userId,
+                eloScore,
+                activityPoints,
+                consecutiveWins,
+                consecutiveLosses,
+                totalGames,
+                winCount,
+                drawCount,
+                runawayCount,
+                lowTrust,
+                placementFairGames,
+                newbieMatchGames,
+                nickname,
+                avatarUrl,
+                null,
+                null,
+                null,
+                null);
+    }
+
+    public UserRatingResponse(
+            long userId,
+            int eloScore,
+            int activityPoints,
+            int consecutiveWins,
+            int consecutiveLosses,
+            int totalGames,
+            int winCount,
+            int drawCount,
+            int runawayCount,
+            boolean lowTrust,
+            int placementFairGames,
+            int newbieMatchGames,
+            String nickname,
+            String avatarUrl,
+            String checkinLastYmd,
+            Integer checkinStreak,
+            List<String> checkinHistory,
+            Boolean tuanMoeUnlocked) {
         this.userId = userId;
         this.eloScore = eloScore;
         this.activityPoints = activityPoints;
@@ -78,6 +132,10 @@ public class UserRatingResponse {
         this.newbieMatchGames = newbieMatchGames;
         this.nickname = nickname;
         this.avatarUrl = avatarUrl;
+        this.checkinLastYmd = checkinLastYmd;
+        this.checkinStreak = checkinStreak;
+        this.checkinHistory = checkinHistory;
+        this.tuanMoeUnlocked = tuanMoeUnlocked;
     }
 
     public long getUserId() {
@@ -134,5 +192,21 @@ public class UserRatingResponse {
 
     public String getAvatarUrl() {
         return avatarUrl;
+    }
+
+    public String getCheckinLastYmd() {
+        return checkinLastYmd;
+    }
+
+    public Integer getCheckinStreak() {
+        return checkinStreak;
+    }
+
+    public List<String> getCheckinHistory() {
+        return checkinHistory;
+    }
+
+    public Boolean getTuanMoeUnlocked() {
+        return tuanMoeUnlocked;
     }
 }

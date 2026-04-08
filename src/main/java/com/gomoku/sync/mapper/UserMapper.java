@@ -17,6 +17,8 @@ public interface UserMapper {
 
     int updateRatingProfile(User user);
 
+    int updateActivityPoints(User user);
+
     /** 随机匹配人机：从 is_bot=1 的用户中任选其一 */
     Long selectRandomBotId();
 }

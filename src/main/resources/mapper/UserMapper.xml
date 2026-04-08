@@ -36,7 +36,8 @@
 
     <sql id="UserColumns">
         id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style, unionid, nickname, avatar_url,
-        elo_score, activity_points, consecutive_wins, consecutive_losses,
+        elo_score, activity_points,
+        consecutive_wins, consecutive_losses,
         today_net_change, elo_carry_over, last_rating_reset_date,
         runaway_count, total_games, win_count, draw_count, season_end_score,
         placement_fair_games, newbie_match_games, newbie_runaway_tally, low_trust,
@@ -101,6 +102,12 @@
             newbie_match_games = #{newbieMatchGames},
             newbie_runaway_tally = #{newbieRunawayTally},
             low_trust = #{lowTrust}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateActivityPoints">
+        UPDATE users
+        SET activity_points = #{activityPoints}
         WHERE id = #{id}
     </update>
 </mapper>

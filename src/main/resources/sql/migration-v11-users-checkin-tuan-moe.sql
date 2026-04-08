@@ -1,0 +1,4 @@
+-- 【已废弃】签到数据已迁至独立表 user_checkin_state，请勿在新环境执行本文件。
+-- 请使用：migration-v12-user-checkin-state.sql（及可选 migration-v13-users-drop-checkin-columns.sql）。
+--
+-- 历史说明：曾向 users 增加签到列；现方案为 user_checkin_state 表，users 仅保留 activity_points。

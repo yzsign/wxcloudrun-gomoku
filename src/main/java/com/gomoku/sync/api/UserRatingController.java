@@ -1,8 +1,12 @@
 package com.gomoku.sync.api;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gomoku.sync.api.dto.ApiError;
 import com.gomoku.sync.api.dto.UserRatingResponse;
 import com.gomoku.sync.domain.User;
+import com.gomoku.sync.domain.UserCheckinState;
+import com.gomoku.sync.mapper.UserCheckinMapper;
 import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.http.HttpStatus;
@@ -12,6 +16,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 @RestController
@@ -19,11 +25,31 @@ import java.util.Optional;
 public class UserRatingController {
 
     private final UserMapper userMapper;
+    private final UserCheckinMapper userCheckinMapper;
     private final SessionJwtService sessionJwtService;
+    private final ObjectMapper objectMapper;
 
-    public UserRatingController(UserMapper userMapper, SessionJwtService sessionJwtService) {
+    public UserRatingController(
+            UserMapper userMapper,
+            UserCheckinMapper userCheckinMapper,
+            SessionJwtService sessionJwtService,
+            ObjectMapper objectMapper) {
         this.userMapper = userMapper;
+        this.userCheckinMapper = userCheckinMapper;
         this.sessionJwtService = sessionJwtService;
+        this.objectMapper = objectMapper;
+    }
+
+    private List<String> parseCheckinHistoryJson(String json) {
+        if (json == null || json.isEmpty()) {
+            return Collections.emptyList();
+        }
+        try {
+            List<String> list = objectMapper.readValue(json, new TypeReference<List<String>>() {});
+            return list != null ? list : Collections.emptyList();
+        } catch (Exception e) {
+            return Collections.emptyList();
+        }
     }
 
     @GetMapping("/rating")
@@ -40,6 +66,12 @@ public class UserRatingController {
         }
         String nick = u.getNickname();
         String av = u.getAvatarUrl();
+        UserCheckinState cs = userCheckinMapper.selectByUserId(uid.get());
+        List<String> checkinHist =
+                cs != null ? parseCheckinHistoryJson(cs.getHistoryJson()) : Collections.emptyList();
+        String checkinLastYmd = cs != null ? cs.getLastCheckinYmd() : null;
+        int checkinStreak = cs != null ? cs.getStreak() : 0;
+        boolean tuanUnlocked = cs != null && cs.isPieceSkinTuanMoeUnlocked();
         UserRatingResponse body = new UserRatingResponse(
                 u.getId().longValue(),
                 u.getEloScore(),
@@ -54,7 +86,11 @@ public class UserRatingController {
                 u.getPlacementFairGames(),
                 u.getNewbieMatchGames(),
                 nick != null && !nick.isEmpty() ? nick : null,
-                av != null && !av.isEmpty() ? av : null);
+                av != null && !av.isEmpty() ? av : null,
+                checkinLastYmd,
+                checkinStreak,
+                checkinHist,
+                tuanUnlocked);
         return ResponseEntity.ok(body);
     }
 }

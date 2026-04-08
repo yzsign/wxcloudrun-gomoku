@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.UserCheckinMapper">
+
+    <resultMap id="UserCheckinStateResult" type="com.gomoku.sync.domain.UserCheckinState">
+        <id property="userId" column="user_id"/>
+        <result property="lastCheckinYmd" column="last_checkin_ymd"/>
+        <result property="streak" column="streak"/>
+        <result property="historyJson" column="history_json"/>
+        <result property="pieceSkinTuanMoeUnlocked" column="piece_skin_tuan_moe_unlocked"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="Cols">
+        user_id, last_checkin_ymd, streak, history_json, piece_skin_tuan_moe_unlocked, created_at, updated_at
+    </sql>
+
+    <select id="selectByUserId" resultMap="UserCheckinStateResult">
+        SELECT <include refid="Cols"/>
+        FROM user_checkin_state
+        WHERE user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <select id="selectByUserIdForUpdate" resultMap="UserCheckinStateResult">
+        SELECT <include refid="Cols"/>
+        FROM user_checkin_state
+        WHERE user_id = #{userId}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <insert id="insertInitial">
+        INSERT IGNORE INTO user_checkin_state (user_id) VALUES (#{userId})
+    </insert>
+
+    <update id="updateState">
+        UPDATE user_checkin_state
+        SET last_checkin_ymd = #{lastCheckinYmd},
+            streak = #{streak},
+            history_json = #{historyJson,jdbcType=VARCHAR},
+            piece_skin_tuan_moe_unlocked = #{pieceSkinTuanMoeUnlocked}
+        WHERE user_id = #{userId}
+    </update>
+</mapper>
