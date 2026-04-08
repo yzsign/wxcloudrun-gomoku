@@ -16,6 +16,9 @@ import java.util.Map;
 public class PieceSkinRedeemService {
 
     public static final String SKIN_QINGTAO_LIBAI = "qingtao_libai";
+    /** 界面棋盘：青瓷 / 水墨，与客户端 themes.THEMES id 一致 */
+    public static final String THEME_MINT = "mint";
+    public static final String THEME_INK = "ink";
 
     private static final String SOURCE_POINTS = "ACTIVITY_POINTS";
 
@@ -24,6 +27,8 @@ public class PieceSkinRedeemService {
     static {
         Map<String, Integer> m = new HashMap<>();
         m.put(SKIN_QINGTAO_LIBAI, 200);
+        m.put(THEME_MINT, 200);
+        m.put(THEME_INK, 200);
         SKIN_COST_POINTS = Collections.unmodifiableMap(m);
     }
 
