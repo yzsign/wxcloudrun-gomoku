@@ -32,26 +32,98 @@
         WHERE id = #{id}
     </select>
 
+    <!--
+      执黑/执白 UNION ALL，对手直链 users.id，利于走 idx_black_user / idx_white_user。
+      offset=0 时各分支先 ORDER BY + LIMIT，再合并排序，避免物化单侧全部对局行。
+    -->
     <select id="selectHistoryForUser" resultType="com.gomoku.sync.domain.GameHistoryQueryRow">
-        SELECT
-            g.id,
-            g.room_id AS roomId,
-            g.match_round AS matchRound,
-            g.total_steps AS totalSteps,
-            g.outcome,
-            g.created_at AS createdAt,
-            g.black_user_id AS blackUserId,
-            g.white_user_id AS whiteUserId,
-            ou.nickname AS opponentNickname,
-            ou.is_bot AS opponentBot,
-            ou.avatar_url AS opponentAvatarUrl,
-            ou.gender AS opponentGender
-        FROM games g
-        INNER JOIN users ou ON ou.id = (
-            CASE WHEN g.black_user_id = #{userId} THEN g.white_user_id ELSE g.black_user_id END
-        )
-        WHERE g.black_user_id = #{userId} OR g.white_user_id = #{userId}
-        ORDER BY g.created_at DESC
-        LIMIT #{limit} OFFSET #{offset}
+        <choose>
+            <when test="offset == 0">
+                SELECT * FROM (
+                    (
+                        SELECT
+                            g.id,
+                            g.room_id AS roomId,
+                            g.match_round AS matchRound,
+                            g.total_steps AS totalSteps,
+                            g.outcome,
+                            g.created_at AS createdAt,
+                            g.black_user_id AS blackUserId,
+                            g.white_user_id AS whiteUserId,
+                            ou.nickname AS opponentNickname,
+                            ou.is_bot AS opponentBot,
+                            ou.avatar_url AS opponentAvatarUrl,
+                            ou.gender AS opponentGender
+                        FROM games g
+                        INNER JOIN users ou ON ou.id = g.white_user_id
+                        WHERE g.black_user_id = #{userId}
+                        ORDER BY g.created_at DESC
+                        LIMIT #{limit}
+                    )
+                    UNION ALL
+                    (
+                        SELECT
+                            g.id,
+                            g.room_id AS roomId,
+                            g.match_round AS matchRound,
+                            g.total_steps AS totalSteps,
+                            g.outcome,
+                            g.created_at AS createdAt,
+                            g.black_user_id AS blackUserId,
+                            g.white_user_id AS whiteUserId,
+                            ou.nickname AS opponentNickname,
+                            ou.is_bot AS opponentBot,
+                            ou.avatar_url AS opponentAvatarUrl,
+                            ou.gender AS opponentGender
+                        FROM games g
+                        INNER JOIN users ou ON ou.id = g.black_user_id
+                        WHERE g.white_user_id = #{userId}
+                        ORDER BY g.created_at DESC
+                        LIMIT #{limit}
+                    )
+                ) h
+                ORDER BY h.createdAt DESC
+                LIMIT #{limit} OFFSET 0
+            </when>
+            <otherwise>
+                SELECT * FROM (
+                    SELECT
+                        g.id,
+                        g.room_id AS roomId,
+                        g.match_round AS matchRound,
+                        g.total_steps AS totalSteps,
+                        g.outcome,
+                        g.created_at AS createdAt,
+                        g.black_user_id AS blackUserId,
+                        g.white_user_id AS whiteUserId,
+                        ou.nickname AS opponentNickname,
+                        ou.is_bot AS opponentBot,
+                        ou.avatar_url AS opponentAvatarUrl,
+                        ou.gender AS opponentGender
+                    FROM games g
+                    INNER JOIN users ou ON ou.id = g.white_user_id
+                    WHERE g.black_user_id = #{userId}
+                    UNION ALL
+                    SELECT
+                        g.id,
+                        g.room_id AS roomId,
+                        g.match_round AS matchRound,
+                        g.total_steps AS totalSteps,
+                        g.outcome,
+                        g.created_at AS createdAt,
+                        g.black_user_id AS blackUserId,
+                        g.white_user_id AS whiteUserId,
+                        ou.nickname AS opponentNickname,
+                        ou.is_bot AS opponentBot,
+                        ou.avatar_url AS opponentAvatarUrl,
+                        ou.gender AS opponentGender
+                    FROM games g
+                    INNER JOIN users ou ON ou.id = g.black_user_id
+                    WHERE g.white_user_id = #{userId}
+                ) h
+                ORDER BY h.createdAt DESC
+                LIMIT #{limit} OFFSET #{offset}
+            </otherwise>
+        </choose>
     </select>
 </mapper>
