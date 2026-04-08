@@ -31,4 +31,25 @@
         FROM games
         WHERE id = #{id}
     </select>
+
+    <select id="selectHistoryForUser" resultType="com.gomoku.sync.domain.GameHistoryQueryRow">
+        SELECT
+            g.id,
+            g.room_id AS roomId,
+            g.match_round AS matchRound,
+            g.total_steps AS totalSteps,
+            g.outcome,
+            g.created_at AS createdAt,
+            g.black_user_id AS blackUserId,
+            g.white_user_id AS whiteUserId,
+            ou.nickname AS opponentNickname,
+            ou.is_bot AS opponentBot
+        FROM games g
+        INNER JOIN users ou ON ou.id = (
+            CASE WHEN g.black_user_id = #{userId} THEN g.white_user_id ELSE g.black_user_id END
+        )
+        WHERE g.black_user_id = #{userId} OR g.white_user_id = #{userId}
+        ORDER BY g.created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
 </mapper>

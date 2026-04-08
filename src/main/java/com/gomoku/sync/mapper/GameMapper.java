@@ -1,7 +1,10 @@
 package com.gomoku.sync.mapper;
 
+import com.gomoku.sync.domain.GameHistoryQueryRow;
 import com.gomoku.sync.domain.GameRecord;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 public interface GameMapper {
 
@@ -12,4 +15,9 @@ public interface GameMapper {
     GameRecord selectByRoomIdAndMatchRound(@Param("roomId") String roomId, @Param("matchRound") int matchRound);
 
     GameRecord selectById(@Param("id") long id);
+
+    List<GameHistoryQueryRow> selectHistoryForUser(
+            @Param("userId") long userId,
+            @Param("limit") int limit,
+            @Param("offset") int offset);
 }
