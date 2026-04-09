@@ -1,5 +1,5 @@
 -- 人机账号：is_bot=1；openid 采用类微信 28 位匿名串，昵称为常见网名片段，避免「棋手#」「bot:」等可辨特征。
--- avatar_url：小游戏包内资源 local:images/bots/001.png … 100.png（每人一张）；客户端去掉 local: 后作本地路径加载。
+-- avatar_url：INSERT 中占位为 local:images/bots/NNN.png；上线后请执行 migration-v21-bots-avatar-network-dicebear.sql 改为 DiceBear 网络 PNG（小游戏 downloadFile 域名需包含 api.dicebear.com）。
 -- 若库中已插入旧版 bot:gomoku:*：可先备份，再 DELETE FROM users WHERE is_bot=1; 后重新执行本文件 INSERT（注意外键/历史对局是否引用人机 id）。
 ALTER TABLE `users`
   ADD COLUMN `is_bot` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=人机账号，不参与真实登录' AFTER `openid`,

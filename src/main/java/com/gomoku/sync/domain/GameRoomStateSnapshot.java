@@ -22,6 +22,8 @@ public class GameRoomStateSnapshot {
     private int pendingUndoPops;
     /** 终局后再来一局邀请发起方颜色 */
     private Integer pendingRematchRequesterColor;
+    /** 非空表示有待对方处理的和棋申请 */
+    private Integer pendingDrawRequesterColor;
     /** 集群内任一端是否仍有黑方连接（跨实例展示用） */
     private boolean clusterBlackConnected;
     private boolean clusterWhiteConnected;
@@ -38,6 +40,7 @@ public class GameRoomStateSnapshot {
         s.pendingUndoRequesterColor = null;
         s.pendingUndoPops = 0;
         s.pendingRematchRequesterColor = null;
+        s.pendingDrawRequesterColor = null;
         s.clusterBlackConnected = false;
         s.clusterWhiteConnected = false;
         return s;
@@ -121,6 +124,14 @@ public class GameRoomStateSnapshot {
 
     public void setPendingRematchRequesterColor(Integer pendingRematchRequesterColor) {
         this.pendingRematchRequesterColor = pendingRematchRequesterColor;
+    }
+
+    public Integer getPendingDrawRequesterColor() {
+        return pendingDrawRequesterColor;
+    }
+
+    public void setPendingDrawRequesterColor(Integer pendingDrawRequesterColor) {
+        this.pendingDrawRequesterColor = pendingDrawRequesterColor;
     }
 
     public boolean isClusterBlackConnected() {

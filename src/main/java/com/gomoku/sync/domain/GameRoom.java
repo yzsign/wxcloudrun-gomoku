@@ -46,6 +46,8 @@ public class GameRoom {
 
     /** 非空表示有待对方处理的悔棋申请 */
     private Integer pendingUndoRequesterColor;
+    /** 非空表示有待对方处理的和棋申请 */
+    private Integer pendingDrawRequesterColor;
     /** 非空表示终局后一方已发起「再来一局」，待对方同意（与 undo 互斥） */
     private Integer pendingRematchRequesterColor;
     /** 同意时撤销的步数：1 仅撤回申请方上一手；2 对方已应手后连撤两手（须对方同意） */
@@ -356,6 +358,24 @@ public class GameRoom {
         }
     }
 
+    public boolean isDrawPending() {
+        lock.lock();
+        try {
+            return pendingDrawRequesterColor != null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public Integer getPendingDrawRequesterColor() {
+        lock.lock();
+        try {
+            return pendingDrawRequesterColor;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private static int oppositeColor(int color) {
         return color == Stone.BLACK ? Stone.WHITE : Stone.BLACK;
     }
@@ -415,6 +435,9 @@ public class GameRoom {
             if (gameOver) {
                 return "对局已结束";
             }
+            if (pendingDrawRequesterColor != null) {
+                return "请先处理和棋申请";
+            }
             if (pendingUndoRequesterColor != null) {
                 return "已有悔棋申请";
             }
@@ -439,6 +462,86 @@ public class GameRoom {
             }
             pendingUndoRequesterColor = color;
             pendingUndoPops = pops;
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 提议和棋，待对方同意或拒绝。
+     *
+     * @return 错误信息，null 表示成功
+     */
+    public String requestDraw(int color) {
+        lock.lock();
+        try {
+            if (gameOver) {
+                return "对局已结束";
+            }
+            if (pendingUndoRequesterColor != null) {
+                return "请先处理悔棋申请";
+            }
+            if (pendingDrawRequesterColor != null) {
+                return "已有和棋申请";
+            }
+            pendingDrawRequesterColor = color;
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public String acceptDraw(int color) {
+        lock.lock();
+        try {
+            if (pendingDrawRequesterColor == null) {
+                return "没有待处理的和棋申请";
+            }
+            if (pendingDrawRequesterColor == color) {
+                return "须由对方同意";
+            }
+            if (color != oppositeColor(pendingDrawRequesterColor)) {
+                return "须由对方回应";
+            }
+            gameOver = true;
+            winner = null;
+            pendingDrawRequesterColor = null;
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public String rejectDraw(int color) {
+        lock.lock();
+        try {
+            if (pendingDrawRequesterColor == null) {
+                return "没有待处理的和棋申请";
+            }
+            if (pendingDrawRequesterColor == color) {
+                return "须由对方回应";
+            }
+            if (color != oppositeColor(pendingDrawRequesterColor)) {
+                return "须由对方回应";
+            }
+            pendingDrawRequesterColor = null;
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public String cancelDrawRequest(int color) {
+        lock.lock();
+        try {
+            if (pendingDrawRequesterColor == null) {
+                return "没有和棋申请";
+            }
+            if (pendingDrawRequesterColor != color) {
+                return "仅申请人可取消";
+            }
+            pendingDrawRequesterColor = null;
             return null;
         } finally {
             lock.unlock();
@@ -552,6 +655,9 @@ public class GameRoom {
             if (pendingUndoRequesterColor != null) {
                 return "请先处理悔棋申请";
             }
+            if (pendingDrawRequesterColor != null) {
+                return "请先处理和棋申请";
+            }
             if (current != color) {
                 return "当前不是你的回合";
             }
@@ -578,6 +684,28 @@ public class GameRoom {
         }
     }
 
+    /**
+     * 认输：对手获胜，终局。
+     *
+     * @return 错误信息，null 表示成功
+     */
+    public String tryResign(int color) {
+        lock.lock();
+        try {
+            if (gameOver) {
+                return "对局已结束";
+            }
+            pendingUndoRequesterColor = null;
+            pendingUndoPops = 0;
+            pendingDrawRequesterColor = null;
+            gameOver = true;
+            winner = oppositeColor(color);
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     public void resetMatch() {
         lock.lock();
         try {
@@ -594,6 +722,7 @@ public class GameRoom {
             pendingUndoRequesterColor = null;
             pendingUndoPops = 0;
             pendingRematchRequesterColor = null;
+            pendingDrawRequesterColor = null;
         } finally {
             lock.unlock();
         }
@@ -621,6 +750,9 @@ public class GameRoom {
             }
             if (pendingUndoRequesterColor != null) {
                 return "请先处理悔棋申请";
+            }
+            if (pendingDrawRequesterColor != null) {
+                return "请先处理和棋申请";
             }
             if (whiteIsBot && color == Stone.BLACK) {
                 resetMatch();
@@ -712,6 +844,7 @@ public class GameRoom {
             s.setPendingUndoRequesterColor(pendingUndoRequesterColor);
             s.setPendingUndoPops(pendingUndoRequesterColor == null ? 0 : pendingUndoPops);
             s.setPendingRematchRequesterColor(pendingRematchRequesterColor);
+            s.setPendingDrawRequesterColor(pendingDrawRequesterColor);
             s.setClusterBlackConnected(clusterBlackConnected);
             s.setClusterWhiteConnected(clusterWhiteConnected);
             List<GameRoomStateSnapshot.MoveRecord> list = new ArrayList<>();
@@ -754,6 +887,7 @@ public class GameRoom {
             clusterBlackConnected = snap.isClusterBlackConnected();
             clusterWhiteConnected = snap.isClusterWhiteConnected();
             pendingRematchRequesterColor = snap.getPendingRematchRequesterColor();
+            pendingDrawRequesterColor = snap.getPendingDrawRequesterColor();
             moveHistory.clear();
             if (snap.getMoves() != null) {
                 for (GameRoomStateSnapshot.MoveRecord m : snap.getMoves()) {

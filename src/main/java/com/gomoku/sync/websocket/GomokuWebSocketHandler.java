@@ -44,6 +44,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     /** 人机对悔棋请求的延迟应答 */
     private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotUndoResponses =
             new ConcurrentHashMap<>();
+    /** 人机对和棋请求的延迟应答 */
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotDrawResponses =
+            new ConcurrentHashMap<>();
 
     public GomokuWebSocketHandler(
             RoomService roomService,
@@ -170,6 +173,16 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             handleUndoReject(session, room, color);
         } else if ("UNDO_CANCEL".equals(type)) {
             handleUndoCancel(session, room, color);
+        } else if ("RESIGN".equals(type)) {
+            handleResign(session, room, color);
+        } else if ("DRAW_REQUEST".equals(type)) {
+            handleDrawRequest(session, room, color);
+        } else if ("DRAW_ACCEPT".equals(type)) {
+            handleDrawAccept(session, room, color);
+        } else if ("DRAW_REJECT".equals(type)) {
+            handleDrawReject(session, room, color);
+        } else if ("DRAW_CANCEL".equals(type)) {
+            handleDrawCancel(session, room, color);
         } else {
             sendToSession(session, error("未知消息类型: " + type));
         }
@@ -263,6 +276,109 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         roomGameStateService.syncRoomFromDbIfBehind(room);
         cancelPendingBotUndoResponse(room.getRoomId());
         String err = room.cancelUndoRequest(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
+    }
+
+    private void handleDrawRequest(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        String err = room.requestDraw(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        if (room.isWhiteIsBot()
+                && room.isDrawPending()
+                && room.getPendingDrawRequesterColor() != null
+                && room.getPendingDrawRequesterColor() == Stone.BLACK) {
+            if (!roomGameStateService.tryPersist(room)) {
+                roomGameStateService.forceReloadFromDb(room);
+                sendToSession(session, error("对局状态已同步，请重试"));
+                broadcastState(room);
+                return;
+            }
+            broadcastState(room);
+            scheduleBotDrawResponse(room);
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
+    }
+
+    private void handleDrawAccept(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotDrawResponse(room.getRoomId());
+        String err = room.acceptDraw(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
+    }
+
+    private void handleDrawReject(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotDrawResponse(room.getRoomId());
+        String err = room.rejectDraw(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
+    }
+
+    private void handleDrawCancel(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotDrawResponse(room.getRoomId());
+        String err = room.cancelDrawRequest(color);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
+    }
+
+    private void handleResign(WebSocketSession session, GameRoom room, int color) {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotTasks(room.getRoomId());
+        String err = room.tryResign(color);
         if (err != null) {
             sendToSession(session, error(err));
             return;
@@ -401,6 +517,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         if (room.isUndoPending()) {
             return;
         }
+        if (room.isDrawPending()) {
+            return;
+        }
         if (room.getCurrent() != Stone.WHITE) {
             return;
         }
@@ -436,6 +555,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         if (room.isUndoPending()) {
+            return;
+        }
+        if (room.isDrawPending()) {
             return;
         }
         if (room.getCurrent() != Stone.WHITE) {
@@ -514,6 +636,55 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         pendingBotUndoResponses.put(roomId, holder[0]);
     }
 
+    /** 人机对黑方和棋：延迟 1~3 秒后，70% 同意、30% 拒绝。 */
+    private void scheduleBotDrawResponse(GameRoom room) {
+        String roomId = room.getRoomId();
+        cancelPendingBotDrawResponse(roomId);
+        long delayMs = 1000L + ThreadLocalRandom.current().nextInt(2001);
+        ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
+        holder[0] =
+                botScheduler.schedule(
+                        () -> {
+                            try {
+                                if (holder[0].isCancelled()) {
+                                    return;
+                                }
+                                ScheduledFuture<?> current = pendingBotDrawResponses.get(roomId);
+                                if (current != holder[0]) {
+                                    return;
+                                }
+                                roomGameStateService.syncRoomFromDbIfBehind(room);
+                                if (!room.isWhiteIsBot()
+                                        || !room.isDrawPending()
+                                        || room.getPendingDrawRequesterColor() == null
+                                        || room.getPendingDrawRequesterColor() != Stone.BLACK) {
+                                    return;
+                                }
+                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                String err =
+                                        reject
+                                                ? room.rejectDraw(Stone.WHITE)
+                                                : room.acceptDraw(Stone.WHITE);
+                                if (err != null) {
+                                    broadcastState(room);
+                                    return;
+                                }
+                                if (!roomGameStateService.tryPersist(room)) {
+                                    roomGameStateService.forceReloadFromDb(room);
+                                    broadcastState(room);
+                                    return;
+                                }
+                                broadcastState(room);
+                                maybePlayBot(room);
+                            } finally {
+                                pendingBotDrawResponses.remove(roomId, holder[0]);
+                            }
+                        },
+                        delayMs,
+                        TimeUnit.MILLISECONDS);
+        pendingBotDrawResponses.put(roomId, holder[0]);
+    }
+
     private void cancelPendingBotMove(String roomId) {
         ScheduledFuture<?> f = pendingBotMoves.remove(roomId);
         if (f != null) {
@@ -528,9 +699,17 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    private void cancelPendingBotDrawResponse(String roomId) {
+        ScheduledFuture<?> f = pendingBotDrawResponses.remove(roomId);
+        if (f != null) {
+            f.cancel(false);
+        }
+    }
+
     private void cancelPendingBotTasks(String roomId) {
         cancelPendingBotMove(roomId);
         cancelPendingBotUndoResponse(roomId);
+        cancelPendingBotDrawResponse(roomId);
     }
 
     @Override
@@ -617,6 +796,12 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 n.putNull("undoRequesterColor");
             } else {
                 n.put("undoRequesterColor", room.getPendingUndoRequesterColor());
+            }
+            n.put("drawPending", room.isDrawPending());
+            if (room.getPendingDrawRequesterColor() == null) {
+                n.putNull("drawRequesterColor");
+            } else {
+                n.put("drawRequesterColor", room.getPendingDrawRequesterColor());
             }
             return new TextMessage(objectMapper.writeValueAsString(n));
         } catch (Exception e) {
