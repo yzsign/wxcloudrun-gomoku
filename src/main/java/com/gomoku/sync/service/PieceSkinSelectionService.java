@@ -4,6 +4,7 @@ import com.gomoku.sync.api.dto.PieceSkinSelectResponse;
 import com.gomoku.sync.domain.CosmeticCategory;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserCheckinState;
+import com.gomoku.sync.domain.UserEquippedCosmetic;
 import com.gomoku.sync.mapper.UserCheckinMapper;
 import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
@@ -63,6 +64,27 @@ public class PieceSkinSelectionService {
         }
         String t = raw.trim();
         return isSelectableSkinId(t) ? t : SKIN_BASIC;
+    }
+
+    /**
+     * 当前佩戴棋子皮肤：与 {@code GET /api/me/rating} 的 pieceSkinId 一致（装备槽 PIECE_SKIN 优先于 users.piece_skin_id）。
+     * 用于 WS STATE 广播、对局归档等，避免两列不同步时对手端仍看到 basic。
+     */
+    public String resolveEquippedPieceSkinForBroadcast(long userId) {
+        String pieceSlot = null;
+        for (UserEquippedCosmetic row : userEquippedCosmeticMapper.selectByUserId(userId)) {
+            if (row == null || row.getCategory() == null) {
+                continue;
+            }
+            if (CosmeticCategory.PIECE_SKIN.equals(row.getCategory())) {
+                pieceSlot = row.getItemId();
+                break;
+            }
+        }
+        if (pieceSlot != null && !pieceSlot.isEmpty()) {
+            return sanitizeStoredPieceSkinId(pieceSlot);
+        }
+        return sanitizeStoredPieceSkinId(userMapper.selectPieceSkinIdByUserId(userId));
     }
 
     @Transactional

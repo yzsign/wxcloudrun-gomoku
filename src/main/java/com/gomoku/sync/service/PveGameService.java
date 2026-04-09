@@ -14,10 +14,15 @@ public class PveGameService {
 
     private final UserMapper userMapper;
     private final GameMapper gameMapper;
+    private final PieceSkinSelectionService pieceSkinSelectionService;
 
-    public PveGameService(UserMapper userMapper, GameMapper gameMapper) {
+    public PveGameService(
+            UserMapper userMapper,
+            GameMapper gameMapper,
+            PieceSkinSelectionService pieceSkinSelectionService) {
         this.userMapper = userMapper;
         this.gameMapper = gameMapper;
+        this.pieceSkinSelectionService = pieceSkinSelectionService;
     }
 
     /**
@@ -77,12 +82,8 @@ public class PveGameService {
             mj = null;
         }
         g.setMovesJson(mj);
-        g.setBlackPieceSkinId(
-                PieceSkinSelectionService.sanitizeStoredPieceSkinId(
-                        blackId == humanUserId ? human.getPieceSkinId() : bot.getPieceSkinId()));
-        g.setWhitePieceSkinId(
-                PieceSkinSelectionService.sanitizeStoredPieceSkinId(
-                        whiteId == humanUserId ? human.getPieceSkinId() : bot.getPieceSkinId()));
+        g.setBlackPieceSkinId(pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(blackId));
+        g.setWhitePieceSkinId(pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(whiteId));
 
         gameMapper.insert(g);
         return g.getId() != null ? g.getId() : 0L;

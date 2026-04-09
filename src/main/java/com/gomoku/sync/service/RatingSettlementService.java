@@ -40,6 +40,7 @@ public class RatingSettlementService {
     private final RoomService roomService;
     private final RoomGameStateService roomGameStateService;
     private final ObjectMapper objectMapper;
+    private final PieceSkinSelectionService pieceSkinSelectionService;
 
     public RatingSettlementService(
             RoomParticipantMapper roomParticipantMapper,
@@ -48,7 +49,8 @@ public class RatingSettlementService {
             UserMapper userMapper,
             RoomService roomService,
             RoomGameStateService roomGameStateService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            PieceSkinSelectionService pieceSkinSelectionService) {
         this.roomParticipantMapper = roomParticipantMapper;
         this.gameMapper = gameMapper;
         this.ratingChangeLogMapper = ratingChangeLogMapper;
@@ -56,6 +58,7 @@ public class RatingSettlementService {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
         this.objectMapper = objectMapper;
+        this.pieceSkinSelectionService = pieceSkinSelectionService;
     }
 
     @Transactional
@@ -232,8 +235,8 @@ public class RatingSettlementService {
         game.setBlackEloDelta(blackDeltaAct);
         game.setWhiteEloDelta(whiteDeltaAct);
         game.setMovesJson(resolveMovesJson(req, matchRound, steps));
-        game.setBlackPieceSkinId(PieceSkinSelectionService.sanitizeStoredPieceSkinId(black.getPieceSkinId()));
-        game.setWhitePieceSkinId(PieceSkinSelectionService.sanitizeStoredPieceSkinId(white.getPieceSkinId()));
+        game.setBlackPieceSkinId(pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(blackId));
+        game.setWhitePieceSkinId(pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(whiteId));
         gameMapper.insert(game);
         long gameId = game.getId() != null ? game.getId() : 0L;
 

@@ -7,7 +7,6 @@ import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.Stone;
-import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.service.PieceSkinSelectionService;
 import com.gomoku.sync.service.RoomGameStateService;
 import com.gomoku.sync.service.RoomService;
@@ -40,7 +39,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private final RoomSessionTracker roomSessionTracker;
     private final ObjectMapper objectMapper;
     private final SessionJwtService sessionJwtService;
-    private final UserMapper userMapper;
+    private final PieceSkinSelectionService pieceSkinSelectionService;
     private final ScheduledExecutorService botScheduler;
     /** 人机落子延迟任务，同房间新调度会取消旧任务 */
     private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotMoves = new ConcurrentHashMap<>();
@@ -57,14 +56,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             RoomSessionTracker roomSessionTracker,
             ObjectMapper objectMapper,
             SessionJwtService sessionJwtService,
-            UserMapper userMapper,
+            PieceSkinSelectionService pieceSkinSelectionService,
             ScheduledExecutorService gomokuBotScheduler) {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
         this.roomSessionTracker = roomSessionTracker;
         this.objectMapper = objectMapper;
         this.sessionJwtService = sessionJwtService;
-        this.userMapper = userMapper;
+        this.pieceSkinSelectionService = pieceSkinSelectionService;
         this.botScheduler = gomokuBotScheduler;
     }
 
@@ -763,12 +762,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
-    /**
-     * 对局双方棋子皮肤：与 users.piece_skin_id 一致，非法值回退为 basic。
-     */
+    /** 对局双方棋子皮肤：与 /api/me/rating 展示逻辑一致（装备槽优先）。 */
     private String pieceSkinIdForSeat(long userId) {
-        return PieceSkinSelectionService.sanitizeStoredPieceSkinId(
-                userMapper.selectPieceSkinIdByUserId(userId));
+        return pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(userId);
     }
 
     private TextMessage stateJson(GameRoom room, int yourColor) {
