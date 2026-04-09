@@ -59,7 +59,7 @@ public class PieceSkinSelectionService {
      * 将数据库或请求中的原始值规范为可展示/可存档的 id（非法或空则 basic）。
      */
     public static String sanitizeStoredPieceSkinId(String raw) {
-        if (raw == null || raw.isBlank()) {
+        if (raw == null || raw.trim().isEmpty()) {
             return SKIN_BASIC;
         }
         String t = raw.trim();
