@@ -84,8 +84,20 @@ public class RatingSettlementService {
             throw new IllegalArgumentException("局次不匹配");
         }
 
-        if (gameMapper.countByRoomIdAndMatchRound(req.getRoomId(), matchRound) > 0) {
-            throw new IllegalStateException("该房间本局已结算");
+        GameRecord existingGame =
+                gameMapper.selectByRoomIdAndMatchRound(req.getRoomId(), matchRound);
+        if (existingGame != null) {
+            if (callerUserId != existingGame.getBlackUserId()
+                    && callerUserId != existingGame.getWhiteUserId()) {
+                throw new IllegalArgumentException("仅对局双方可提交结算");
+            }
+            long existingId = existingGame.getId() != null ? existingGame.getId() : 0L;
+            return new SettleGameResponse(
+                    existingId,
+                    existingGame.getBlackEloAfter(),
+                    existingGame.getWhiteEloAfter(),
+                    existingGame.getBlackEloDelta(),
+                    existingGame.getWhiteEloDelta());
         }
 
         RoomParticipant rp = roomParticipantMapper.selectByRoomId(req.getRoomId());
