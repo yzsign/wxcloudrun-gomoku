@@ -9,6 +9,9 @@ public interface UserMapper {
 
     User selectById(@Param("id") long id);
 
+    /** 仅用于对局广播等轻量场景；可能为 null（未设置） */
+    String selectPieceSkinIdByUserId(@Param("id") long id);
+
     User selectByIdForUpdate(@Param("id") long id);
 
     int insert(User user);

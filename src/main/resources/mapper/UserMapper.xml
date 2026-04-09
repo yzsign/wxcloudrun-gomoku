@@ -60,6 +60,13 @@
         LIMIT 1
     </select>
 
+    <select id="selectPieceSkinIdByUserId" resultType="java.lang.String">
+        SELECT piece_skin_id
+        FROM users
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
     <select id="selectByIdForUpdate" resultMap="UserResult">
         SELECT <include refid="UserColumns"/>
         FROM users

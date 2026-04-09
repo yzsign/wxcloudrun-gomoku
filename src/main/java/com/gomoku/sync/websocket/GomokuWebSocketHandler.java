@@ -7,6 +7,8 @@ import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.Stone;
+import com.gomoku.sync.mapper.UserMapper;
+import com.gomoku.sync.service.PieceSkinSelectionService;
 import com.gomoku.sync.service.RoomGameStateService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
@@ -38,6 +40,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private final RoomSessionTracker roomSessionTracker;
     private final ObjectMapper objectMapper;
     private final SessionJwtService sessionJwtService;
+    private final UserMapper userMapper;
     private final ScheduledExecutorService botScheduler;
     /** 人机落子延迟任务，同房间新调度会取消旧任务 */
     private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotMoves = new ConcurrentHashMap<>();
@@ -54,12 +57,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             RoomSessionTracker roomSessionTracker,
             ObjectMapper objectMapper,
             SessionJwtService sessionJwtService,
+            UserMapper userMapper,
             ScheduledExecutorService gomokuBotScheduler) {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
         this.roomSessionTracker = roomSessionTracker;
         this.objectMapper = objectMapper;
         this.sessionJwtService = sessionJwtService;
+        this.userMapper = userMapper;
         this.botScheduler = gomokuBotScheduler;
     }
 
@@ -758,6 +763,21 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /**
+     * 对局双方棋子皮肤：与 users.piece_skin_id 一致，非法值回退为 basic。
+     */
+    private String pieceSkinIdForSeat(long userId) {
+        String raw = userMapper.selectPieceSkinIdByUserId(userId);
+        if (raw == null || raw.isBlank()) {
+            return PieceSkinSelectionService.SKIN_BASIC;
+        }
+        String t = raw.trim();
+        if (PieceSkinSelectionService.isSelectableSkinId(t)) {
+            return t;
+        }
+        return PieceSkinSelectionService.SKIN_BASIC;
+    }
+
     private TextMessage stateJson(GameRoom room, int yourColor) {
         try {
             ObjectNode n = objectMapper.createObjectNode();
@@ -774,6 +794,13 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             }
             n.put("matchRound", room.getMatchRound());
             n.put("yourColor", yourColor);
+            n.put("blackPieceSkinId", pieceSkinIdForSeat(room.getBlackUserId()));
+            Long whiteUid = room.getWhiteUserId();
+            if (whiteUid == null) {
+                n.put("whitePieceSkinId", PieceSkinSelectionService.SKIN_BASIC);
+            } else {
+                n.put("whitePieceSkinId", pieceSkinIdForSeat(whiteUid));
+            }
             boolean blackHere =
                     (room.getBlackSession() != null && room.getBlackSession().isOpen())
                             || room.isClusterBlackConnected();
