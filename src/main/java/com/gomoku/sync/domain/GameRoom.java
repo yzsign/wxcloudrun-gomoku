@@ -46,6 +46,8 @@ public class GameRoom {
 
     /** 非空表示有待对方处理的悔棋申请 */
     private Integer pendingUndoRequesterColor;
+    /** 非空表示终局后一方已发起「再来一局」，待对方同意（与 undo 互斥） */
+    private Integer pendingRematchRequesterColor;
     /** 同意时撤销的步数：1 仅撤回申请方上一手；2 对方已应手后连撤两手（须对方同意） */
     private int pendingUndoPops;
 
@@ -591,6 +593,103 @@ public class GameRoom {
             moveHistory.clear();
             pendingUndoRequesterColor = null;
             pendingUndoPops = 0;
+            pendingRematchRequesterColor = null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public Integer getPendingRematchRequesterColor() {
+        lock.lock();
+        try {
+            return pendingRematchRequesterColor;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 终局后请求再来一局；人机时由黑方发起则立即开局。
+     *
+     * @return 错误信息，null 表示成功
+     */
+    public String requestRematch(int color) {
+        lock.lock();
+        try {
+            if (!gameOver) {
+                return "对局未结束";
+            }
+            if (pendingUndoRequesterColor != null) {
+                return "请先处理悔棋申请";
+            }
+            if (whiteIsBot && color == Stone.BLACK) {
+                resetMatch();
+                return null;
+            }
+            if (pendingRematchRequesterColor != null
+                    && !pendingRematchRequesterColor.equals(color)) {
+                return "已有待处理的再来一局邀请";
+            }
+            if (pendingRematchRequesterColor != null) {
+                return null;
+            }
+            pendingRematchRequesterColor = color;
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 受邀方同意再来一局。
+     */
+    public String acceptRematch(int color) {
+        lock.lock();
+        try {
+            if (pendingRematchRequesterColor == null) {
+                return "暂无再来一局邀请";
+            }
+            if (pendingRematchRequesterColor == color) {
+                return "需由对方同意";
+            }
+            resetMatch();
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 受邀方拒绝。
+     */
+    public String declineRematch(int color) {
+        lock.lock();
+        try {
+            if (pendingRematchRequesterColor == null) {
+                return "暂无邀请";
+            }
+            if (pendingRematchRequesterColor == color) {
+                return "不能拒绝自己的邀请";
+            }
+            pendingRematchRequesterColor = null;
+            return null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /** 发起方撤销邀请 */
+    public String cancelRematchRequest(int color) {
+        lock.lock();
+        try {
+            if (pendingRematchRequesterColor == null) {
+                return null;
+            }
+            if (!pendingRematchRequesterColor.equals(color)) {
+                return "只能撤销自己的邀请";
+            }
+            pendingRematchRequesterColor = null;
+            return null;
         } finally {
             lock.unlock();
         }
@@ -612,6 +711,7 @@ public class GameRoom {
             s.setMatchRound(matchRound);
             s.setPendingUndoRequesterColor(pendingUndoRequesterColor);
             s.setPendingUndoPops(pendingUndoRequesterColor == null ? 0 : pendingUndoPops);
+            s.setPendingRematchRequesterColor(pendingRematchRequesterColor);
             s.setClusterBlackConnected(clusterBlackConnected);
             s.setClusterWhiteConnected(clusterWhiteConnected);
             List<GameRoomStateSnapshot.MoveRecord> list = new ArrayList<>();
@@ -653,6 +753,7 @@ public class GameRoom {
             }
             clusterBlackConnected = snap.isClusterBlackConnected();
             clusterWhiteConnected = snap.isClusterWhiteConnected();
+            pendingRematchRequesterColor = snap.getPendingRematchRequesterColor();
             moveHistory.clear();
             if (snap.getMoves() != null) {
                 for (GameRoomStateSnapshot.MoveRecord m : snap.getMoves()) {

@@ -154,8 +154,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         String type = root.path("type").asText("");
         if ("MOVE".equals(type)) {
             handleMove(session, room, color, root);
-        } else if ("RESET".equals(type)) {
-            handleReset(session, room);
+        } else if ("RESET".equals(type) || "REMATCH_REQUEST".equals(type)) {
+            handleRematchRequest(session, room, color);
+        } else if ("REMATCH_ACCEPT".equals(type)) {
+            handleRematchAccept(session, room, color);
+        } else if ("REMATCH_DECLINE".equals(type)) {
+            handleRematchDecline(session, room, color);
+        } else if ("REMATCH_CANCEL".equals(type)) {
+            handleRematchCancel(session, room, color);
         } else if ("UNDO_REQUEST".equals(type)) {
             handleUndoRequest(session, room, color);
         } else if ("UNDO_ACCEPT".equals(type)) {
@@ -271,22 +277,25 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         maybePlayBot(room);
     }
 
-    /** 对局结束后任一方可申请重新开始（同房间） */
-    private void handleReset(WebSocketSession session, GameRoom room) {
+    /** 终局后发起「再来一局」邀请（同房间；人机侧可立即开局） */
+    private void handleRematchRequest(WebSocketSession session, GameRoom room, int color) throws Exception {
         roomGameStateService.syncRoomFromDbIfBehind(room);
         cancelPendingBotTasks(room.getRoomId());
         room.getLock().lock();
         try {
             if (!room.isGameOver()) {
-                // 对方已 reset、本端结算未关时：房间已是新局，重复 RESET 视为同步状态
                 if (room.isBoardEmpty()) {
                     broadcastState(room);
                     return;
                 }
-                sendToSession(session, error("对局未结束，不能重置"));
+                sendToSession(session, error("对局未结束，不能再来一局"));
                 return;
             }
-            room.resetMatch();
+            String err = room.requestRematch(color);
+            if (err != null) {
+                sendToSession(session, error(err));
+                return;
+            }
         } finally {
             room.getLock().unlock();
         }
@@ -298,6 +307,87 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
         broadcastState(room);
         maybePlayBot(room);
+    }
+
+    private void handleRematchAccept(WebSocketSession session, GameRoom room, int color) throws Exception {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotTasks(room.getRoomId());
+        room.getLock().lock();
+        try {
+            String err = room.acceptRematch(color);
+            if (err != null) {
+                sendToSession(session, error(err));
+                return;
+            }
+        } finally {
+            room.getLock().unlock();
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
+    }
+
+    private void handleRematchDecline(WebSocketSession session, GameRoom room, int color) throws Exception {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        Integer requester = room.getPendingRematchRequesterColor();
+        room.getLock().lock();
+        try {
+            String err = room.declineRematch(color);
+            if (err != null) {
+                sendToSession(session, error(err));
+                return;
+            }
+        } finally {
+            room.getLock().unlock();
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        if (requester != null) {
+            WebSocketSession req =
+                    requester == Stone.BLACK ? room.getBlackSession() : room.getWhiteSession();
+            sendToSession(req, rematchDeclinedNotice());
+        }
+        broadcastState(room);
+    }
+
+    private void handleRematchCancel(WebSocketSession session, GameRoom room, int color) throws Exception {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        room.getLock().lock();
+        try {
+            String err = room.cancelRematchRequest(color);
+            if (err != null) {
+                sendToSession(session, error(err));
+                return;
+            }
+        } finally {
+            room.getLock().unlock();
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+    }
+
+    private TextMessage rematchDeclinedNotice() {
+        try {
+            ObjectNode n = objectMapper.createObjectNode();
+            n.put("type", "REMATCH_DECLINED");
+            return new TextMessage(objectMapper.writeValueAsString(n));
+        } catch (Exception e) {
+            return new TextMessage("{\"type\":\"REMATCH_DECLINED\"}");
+        }
     }
 
     /**
@@ -515,6 +605,13 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                             || room.isClusterWhiteConnected();
             n.put("whiteConnected", whiteHere);
             n.put("whiteIsBot", room.isWhiteIsBot());
+            Integer pr = room.getPendingRematchRequesterColor();
+            n.put("rematchPending", pr != null);
+            if (pr == null) {
+                n.putNull("rematchRequesterColor");
+            } else {
+                n.put("rematchRequesterColor", pr);
+            }
             n.put("undoPending", room.isUndoPending());
             if (room.getPendingUndoRequesterColor() == null) {
                 n.putNull("undoRequesterColor");
