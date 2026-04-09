@@ -18,6 +18,8 @@ public class GameReplayResponse {
     private String outcome;
     private Long runawayUserId;
     private List<GameMoveDto> moves;
+    private String blackPieceSkinId;
+    private String whitePieceSkinId;
 
     public GameReplayResponse() {}
 
@@ -122,5 +124,21 @@ public class GameReplayResponse {
 
     public void setMoves(List<GameMoveDto> moves) {
         this.moves = moves;
+    }
+
+    public String getBlackPieceSkinId() {
+        return blackPieceSkinId;
+    }
+
+    public void setBlackPieceSkinId(String blackPieceSkinId) {
+        this.blackPieceSkinId = blackPieceSkinId;
+    }
+
+    public String getWhitePieceSkinId() {
+        return whitePieceSkinId;
+    }
+
+    public void setWhitePieceSkinId(String whitePieceSkinId) {
+        this.whitePieceSkinId = whitePieceSkinId;
     }
 }

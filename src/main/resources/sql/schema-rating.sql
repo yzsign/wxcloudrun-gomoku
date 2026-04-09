@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS `games` (
   `black_elo_delta` INT NOT NULL,
   `white_elo_delta` INT NOT NULL,
   `moves_json` LONGTEXT NULL COMMENT '终局手顺 JSON，与 GameRoomStateSnapshot.moves 一致',
+  `black_piece_skin_id` VARCHAR(32) NULL DEFAULT NULL COMMENT '终局黑方棋子皮肤',
+  `white_piece_skin_id` VARCHAR(32) NULL DEFAULT NULL COMMENT '终局白方棋子皮肤',
   `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_room_match` (`room_id`, `match_round`),

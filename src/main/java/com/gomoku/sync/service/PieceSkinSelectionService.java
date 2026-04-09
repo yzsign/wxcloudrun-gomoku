@@ -54,6 +54,17 @@ public class PieceSkinSelectionService {
         return skinId != null && SELECTABLE_SKIN_IDS.contains(skinId);
     }
 
+    /**
+     * 将数据库或请求中的原始值规范为可展示/可存档的 id（非法或空则 basic）。
+     */
+    public static String sanitizeStoredPieceSkinId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return SKIN_BASIC;
+        }
+        String t = raw.trim();
+        return isSelectableSkinId(t) ? t : SKIN_BASIC;
+    }
+
     @Transactional
     public SelectionResult setSelectedPieceSkin(long userId, String rawSkinId) {
         if (rawSkinId == null || rawSkinId.trim().isEmpty()) {

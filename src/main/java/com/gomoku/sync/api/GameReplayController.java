@@ -7,6 +7,7 @@ import com.gomoku.sync.api.dto.GameMoveDto;
 import com.gomoku.sync.api.dto.GameReplayResponse;
 import com.gomoku.sync.domain.GameRecord;
 import com.gomoku.sync.mapper.GameMapper;
+import com.gomoku.sync.service.PieceSkinSelectionService;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -110,6 +111,8 @@ public class GameReplayController {
         r.setOutcome(g.getOutcome());
         r.setRunawayUserId(g.getRunawayUserId());
         r.setMoves(moves);
+        r.setBlackPieceSkinId(PieceSkinSelectionService.sanitizeStoredPieceSkinId(g.getBlackPieceSkinId()));
+        r.setWhitePieceSkinId(PieceSkinSelectionService.sanitizeStoredPieceSkinId(g.getWhitePieceSkinId()));
         return r;
     }
 

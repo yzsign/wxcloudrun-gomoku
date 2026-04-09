@@ -232,6 +232,8 @@ public class RatingSettlementService {
         game.setBlackEloDelta(blackDeltaAct);
         game.setWhiteEloDelta(whiteDeltaAct);
         game.setMovesJson(resolveMovesJson(req, matchRound, steps));
+        game.setBlackPieceSkinId(PieceSkinSelectionService.sanitizeStoredPieceSkinId(black.getPieceSkinId()));
+        game.setWhitePieceSkinId(PieceSkinSelectionService.sanitizeStoredPieceSkinId(white.getPieceSkinId()));
         gameMapper.insert(game);
         long gameId = game.getId() != null ? game.getId() : 0L;
 

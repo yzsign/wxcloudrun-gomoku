@@ -767,15 +767,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
      * 对局双方棋子皮肤：与 users.piece_skin_id 一致，非法值回退为 basic。
      */
     private String pieceSkinIdForSeat(long userId) {
-        String raw = userMapper.selectPieceSkinIdByUserId(userId);
-        if (raw == null || raw.isBlank()) {
-            return PieceSkinSelectionService.SKIN_BASIC;
-        }
-        String t = raw.trim();
-        if (PieceSkinSelectionService.isSelectableSkinId(t)) {
-            return t;
-        }
-        return PieceSkinSelectionService.SKIN_BASIC;
+        return PieceSkinSelectionService.sanitizeStoredPieceSkinId(
+                userMapper.selectPieceSkinIdByUserId(userId));
     }
 
     private TextMessage stateJson(GameRoom room, int yourColor) {

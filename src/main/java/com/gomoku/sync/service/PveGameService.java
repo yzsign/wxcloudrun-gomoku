@@ -77,6 +77,12 @@ public class PveGameService {
             mj = null;
         }
         g.setMovesJson(mj);
+        g.setBlackPieceSkinId(
+                PieceSkinSelectionService.sanitizeStoredPieceSkinId(
+                        blackId == humanUserId ? human.getPieceSkinId() : bot.getPieceSkinId()));
+        g.setWhitePieceSkinId(
+                PieceSkinSelectionService.sanitizeStoredPieceSkinId(
+                        whiteId == humanUserId ? human.getPieceSkinId() : bot.getPieceSkinId()));
 
         gameMapper.insert(g);
         return g.getId() != null ? g.getId() : 0L;

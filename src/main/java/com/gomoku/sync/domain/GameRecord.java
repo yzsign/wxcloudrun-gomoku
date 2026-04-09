@@ -21,6 +21,10 @@ public class GameRecord {
     private int whiteEloDelta;
     /** JSON 数组：[{r,c,color}, ...]，与 GameRoomStateSnapshot.MoveRecord 一致 */
     private String movesJson;
+    /** 终局时黑方佩戴棋子皮肤，供回放展示 */
+    private String blackPieceSkinId;
+    /** 终局时白方佩戴棋子皮肤 */
+    private String whitePieceSkinId;
 
     public Long getId() {
         return id;
@@ -140,5 +144,21 @@ public class GameRecord {
 
     public void setMovesJson(String movesJson) {
         this.movesJson = movesJson;
+    }
+
+    public String getBlackPieceSkinId() {
+        return blackPieceSkinId;
+    }
+
+    public void setBlackPieceSkinId(String blackPieceSkinId) {
+        this.blackPieceSkinId = blackPieceSkinId;
+    }
+
+    public String getWhitePieceSkinId() {
+        return whitePieceSkinId;
+    }
+
+    public void setWhitePieceSkinId(String whitePieceSkinId) {
+        this.whitePieceSkinId = whitePieceSkinId;
     }
 }
