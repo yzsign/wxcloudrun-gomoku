@@ -140,24 +140,8 @@ public class RatingSettlementService {
         int rawWhite;
 
         if (OUTCOME_DRAW.equals(outcome)) {
-            rawBlack = EloRatingCalculator.delta(
-                    blackEloBefore,
-                    whiteEloBefore,
-                    0.5,
-                    steps,
-                    black.getConsecutiveWins(),
-                    black.getConsecutiveLosses(),
-                    black.isLowTrust(),
-                    false);
-            rawWhite = EloRatingCalculator.delta(
-                    whiteEloBefore,
-                    blackEloBefore,
-                    0.5,
-                    steps,
-                    white.getConsecutiveWins(),
-                    white.getConsecutiveLosses(),
-                    white.isLowTrust(),
-                    false);
+            rawBlack = 0;
+            rawWhite = 0;
         } else if (OUTCOME_BLACK_WIN.equals(outcome)) {
             boolean forceM1 = runaway && Objects.equals(runawayUid, whiteId);
             rawBlack = EloRatingCalculator.delta(
