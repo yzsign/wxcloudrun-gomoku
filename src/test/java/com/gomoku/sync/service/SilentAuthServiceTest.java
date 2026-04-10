@@ -34,6 +34,8 @@ class SilentAuthServiceTest {
     private UserMapper userMapper;
     @Mock
     private SessionJwtService sessionJwtService;
+    @Mock
+    private AdminTokenService adminTokenService;
 
     @InjectMocks
     private SilentAuthService silentAuthService;
@@ -49,6 +51,7 @@ class SilentAuthServiceTest {
     @BeforeEach
     void jwtStub() {
         when(sessionJwtService.createToken(anyLong())).thenReturn("jwt-test");
+        when(adminTokenService.isOpenidInAdminWhitelist(anyString())).thenReturn(false);
     }
 
     @Test

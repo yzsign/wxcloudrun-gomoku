@@ -17,14 +17,17 @@ public class SilentAuthService {
     private final WeChatMiniappClient weChatMiniappClient;
     private final UserMapper userMapper;
     private final SessionJwtService sessionJwtService;
+    private final AdminTokenService adminTokenService;
 
     public SilentAuthService(
             WeChatMiniappClient weChatMiniappClient,
             UserMapper userMapper,
-            SessionJwtService sessionJwtService) {
+            SessionJwtService sessionJwtService,
+            AdminTokenService adminTokenService) {
         this.weChatMiniappClient = weChatMiniappClient;
         this.userMapper = userMapper;
         this.sessionJwtService = sessionJwtService;
+        this.adminTokenService = adminTokenService;
     }
 
     public SilentLoginResponse silentLogin(SilentLoginRequest req) throws IOException {
@@ -51,7 +54,8 @@ public class SilentAuthService {
             }
             u.setLastLoginAt(now);
             userMapper.insert(u);
-            return new SilentLoginResponse(u.getId(), sessionJwtService.createToken(u.getId()));
+            boolean admin = adminTokenService.isOpenidInAdminWhitelist(wx.getOpenid());
+            return new SilentLoginResponse(u.getId(), sessionJwtService.createToken(u.getId()), admin);
         }
 
         if (StringUtils.hasText(wx.getUnionid())) {
@@ -68,7 +72,8 @@ public class SilentAuthService {
         }
         existing.setLastLoginAt(now);
         userMapper.updateByOpenid(existing);
-        return new SilentLoginResponse(existing.getId(), sessionJwtService.createToken(existing.getId()));
+        boolean admin = adminTokenService.isOpenidInAdminWhitelist(wx.getOpenid());
+        return new SilentLoginResponse(existing.getId(), sessionJwtService.createToken(existing.getId()), admin);
     }
 
     /** 仅接受微信合法取值 0/1/2，其余忽略 */

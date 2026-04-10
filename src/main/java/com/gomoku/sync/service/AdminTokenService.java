@@ -50,4 +50,12 @@ public class AdminTokenService {
         }
         return properties.getOpenidSet().contains(u.getOpenid());
     }
+
+    /** 微信 openid 是否在白名单中（静默登录等场景不查库）。 */
+    public boolean isOpenidInAdminWhitelist(String openid) {
+        if (openid == null || openid.isEmpty()) {
+            return false;
+        }
+        return properties.getOpenidSet().contains(openid);
+    }
 }
