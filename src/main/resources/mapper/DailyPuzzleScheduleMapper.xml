@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.DailyPuzzleScheduleMapper">
+
+    <select id="selectPuzzleIdByDate" resultType="long">
+        SELECT puzzle_id FROM daily_puzzle_schedule WHERE puzzle_date = #{puzzleDate} LIMIT 1
+    </select>
+
+    <insert id="insertIgnore">
+        INSERT IGNORE INTO daily_puzzle_schedule (puzzle_date, puzzle_id) VALUES (#{puzzleDate}, #{puzzleId})
+    </insert>
+</mapper>

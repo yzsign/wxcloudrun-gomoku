@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.DailyPuzzleMapper">
+
+    <resultMap id="DailyPuzzleResult" type="com.gomoku.sync.domain.DailyPuzzle">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="difficulty" column="difficulty"/>
+        <result property="boardSize" column="board_size"/>
+        <result property="boardJson" column="board_json"/>
+        <result property="sideToMove" column="side_to_move"/>
+        <result property="goal" column="goal"/>
+        <result property="maxUserMoves" column="max_user_moves"/>
+        <result property="solutionMovesJson" column="solution_moves_json"/>
+        <result property="hintText" column="hint_text"/>
+        <result property="status" column="status"/>
+    </resultMap>
+
+    <sql id="Cols">
+        id, title, difficulty, board_size, board_json, side_to_move, goal, max_user_moves,
+        solution_moves_json, hint_text, status
+    </sql>
+
+    <select id="selectById" resultMap="DailyPuzzleResult">
+        SELECT <include refid="Cols"/>
+        FROM daily_puzzle
+        WHERE id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM daily_puzzle
+    </select>
+
+    <select id="selectFirstOnlineId" resultType="long">
+        SELECT id FROM daily_puzzle WHERE status = 1 ORDER BY id ASC LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO daily_puzzle (title, difficulty, board_size, board_json, side_to_move, goal,
+                                  max_user_moves, solution_moves_json, hint_text, status)
+        VALUES (#{title}, #{difficulty}, #{boardSize}, #{boardJson}, #{sideToMove}, #{goal},
+                #{maxUserMoves,jdbcType=INTEGER}, #{solutionMovesJson,jdbcType=LONGVARCHAR},
+                #{hintText,jdbcType=VARCHAR}, #{status})
+    </insert>
+</mapper>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.UserDailyPuzzleMapper">
+
+    <resultMap id="Row" type="com.gomoku.sync.domain.UserDailyPuzzle">
+        <id property="userId" column="user_id"/>
+        <result property="puzzleDate" column="puzzle_date"/>
+        <result property="puzzleId" column="puzzle_id"/>
+        <result property="status" column="status"/>
+        <result property="attemptCount" column="attempt_count"/>
+        <result property="bestMovesToWin" column="best_moves_to_win"/>
+        <result property="lastAttemptMovesJson" column="last_attempt_moves_json"/>
+        <result property="solvedAt" column="solved_at"/>
+        <result property="hintUsed" column="hint_used"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="Cols">
+        user_id, puzzle_date, puzzle_id, status, attempt_count, best_moves_to_win,
+        last_attempt_moves_json, solved_at, hint_used, updated_at
+    </sql>
+
+    <select id="selectByUserAndDate" resultMap="Row">
+        SELECT <include refid="Cols"/>
+        FROM user_daily_puzzle
+        WHERE user_id = #{userId} AND puzzle_date = #{puzzleDate}
+        LIMIT 1
+    </select>
+
+    <insert id="insert">
+        INSERT INTO user_daily_puzzle (user_id, puzzle_date, puzzle_id, status, attempt_count, hint_used)
+        VALUES (#{userId}, #{puzzleDate}, #{puzzleId}, #{status}, #{attemptCount}, #{hintUsed})
+    </insert>
+
+    <update id="updateAfterFailedAttempt">
+        UPDATE user_daily_puzzle
+        SET attempt_count = #{attemptCount},
+            last_attempt_moves_json = #{lastAttemptMovesJson,jdbcType=LONGVARCHAR}
+        WHERE user_id = #{userId} AND puzzle_date = #{puzzleDate}
+    </update>
+
+    <update id="updateSolved">
+        UPDATE user_daily_puzzle
+        SET status = #{status},
+            attempt_count = #{attemptCount},
+            best_moves_to_win = #{bestMovesToWin,jdbcType=INTEGER},
+            last_attempt_moves_json = #{lastAttemptMovesJson,jdbcType=LONGVARCHAR},
+            solved_at = #{solvedAt,jdbcType=TIMESTAMP}
+        WHERE user_id = #{userId} AND puzzle_date = #{puzzleDate}
+    </update>
+
+    <update id="updateHintUsed">
+        UPDATE user_daily_puzzle SET hint_used = 1
+        WHERE user_id = #{userId} AND puzzle_date = #{puzzleDate}
+    </update>
+</mapper>
