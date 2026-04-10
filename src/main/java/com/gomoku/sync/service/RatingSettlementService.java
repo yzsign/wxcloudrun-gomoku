@@ -95,12 +95,33 @@ public class RatingSettlementService {
                 throw new IllegalArgumentException("仅对局双方可提交结算");
             }
             long existingId = existingGame.getId() != null ? existingGame.getId() : 0L;
+            User eb = userMapper.selectById(existingGame.getBlackUserId());
+            User ew = userMapper.selectById(existingGame.getWhiteUserId());
+            int bApAfter = eb != null ? eb.getActivityPoints() : 0;
+            int wApAfter = ew != null ? ew.getActivityPoints() : 0;
+            boolean ran = existingGame.getRunawayUserId() != null;
+            int bApDelta =
+                    activityPointsDeltaForSide(
+                            true,
+                            existingGame.getOutcome(),
+                            existingGame.getTotalSteps(),
+                            ran);
+            int wApDelta =
+                    activityPointsDeltaForSide(
+                            false,
+                            existingGame.getOutcome(),
+                            existingGame.getTotalSteps(),
+                            ran);
             return new SettleGameResponse(
                     existingId,
                     existingGame.getBlackEloAfter(),
                     existingGame.getWhiteEloAfter(),
                     existingGame.getBlackEloDelta(),
-                    existingGame.getWhiteEloDelta());
+                    existingGame.getWhiteEloDelta(),
+                    bApAfter,
+                    wApAfter,
+                    bApDelta,
+                    wApDelta);
         }
 
         RoomParticipant rp = roomParticipantMapper.selectByRoomId(req.getRoomId());
@@ -243,7 +264,39 @@ public class RatingSettlementService {
         insertLog(blackId, whiteId, req.getRoomId(), blackEloBefore, blackEloAfter, blackDeltaAct, steps, runaway && Objects.equals(runawayUid, blackId));
         insertLog(whiteId, blackId, req.getRoomId(), whiteEloBefore, whiteEloAfter, whiteDeltaAct, steps, runaway && Objects.equals(runawayUid, whiteId));
 
-        return new SettleGameResponse(gameId, blackEloAfter, whiteEloAfter, blackDeltaAct, whiteDeltaAct);
+        int bApDelta =
+                activityPointsDeltaForSide(
+                        true, outcome, steps, runaway);
+        int wApDelta =
+                activityPointsDeltaForSide(
+                        false, outcome, steps, runaway);
+        return new SettleGameResponse(
+                gameId,
+                blackEloAfter,
+                whiteEloAfter,
+                blackDeltaAct,
+                whiteDeltaAct,
+                black.getActivityPoints(),
+                white.getActivityPoints(),
+                bApDelta,
+                wApDelta);
+    }
+
+    /**
+     * 本局团团积分增量（与 {@link #applyStatsAfterGame} 一致）：有效局 ≥15 手且非逃跑时双方 +10，胜方额外 +5。
+     */
+    static int activityPointsDeltaForSide(
+            boolean forBlack, String outcome, int steps, boolean runaway) {
+        if (steps < 15 || runaway) {
+            return 0;
+        }
+        int n = 10;
+        if (OUTCOME_BLACK_WIN.equals(outcome) && forBlack) {
+            n += 5;
+        } else if (OUTCOME_WHITE_WIN.equals(outcome) && !forBlack) {
+            n += 5;
+        }
+        return n;
     }
 
     /**
@@ -333,14 +386,13 @@ public class RatingSettlementService {
             white.setPlacementFairGames(white.getPlacementFairGames() + 1);
         }
 
-        if (steps >= 15 && !runaway) {
-            black.setActivityPoints(black.getActivityPoints() + 10);
-            white.setActivityPoints(white.getActivityPoints() + 10);
-            if (OUTCOME_BLACK_WIN.equals(outcome)) {
-                black.setActivityPoints(black.getActivityPoints() + 5);
-            } else if (OUTCOME_WHITE_WIN.equals(outcome)) {
-                white.setActivityPoints(white.getActivityPoints() + 5);
-            }
+        int bAp = activityPointsDeltaForSide(true, outcome, steps, runaway);
+        int wAp = activityPointsDeltaForSide(false, outcome, steps, runaway);
+        if (bAp > 0) {
+            black.setActivityPoints(black.getActivityPoints() + bAp);
+        }
+        if (wAp > 0) {
+            white.setActivityPoints(white.getActivityPoints() + wAp);
         }
 
         refreshLowTrust(black);
