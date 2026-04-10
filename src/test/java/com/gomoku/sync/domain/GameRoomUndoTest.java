@@ -61,4 +61,17 @@ class GameRoomUndoTest {
         assertEquals(Stone.EMPTY, b[7][7]);
         assertEquals(Stone.EMPTY, b[7][8]);
     }
+
+    @Test
+    void secondUndoRequestWithin10SecondsAfterRejectIsBlocked() {
+        GameRoom room = new GameRoom("r4", 15, "bt", 1L);
+        room.setWhiteToken("wt");
+        room.setWhiteUserId(2L);
+
+        assertNull(room.tryMove(Stone.BLACK, 7, 7));
+        assertNull(room.tryMove(Stone.WHITE, 7, 8));
+        assertNull(room.requestUndo(Stone.WHITE));
+        assertNull(room.rejectUndo(Stone.BLACK));
+        assertEquals("10秒内不可再次发起悔棋", room.requestUndo(Stone.WHITE));
+    }
 }

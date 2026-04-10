@@ -1,9 +1,13 @@
 # 二开推荐阅读[如何提高项目构建效率](https://developers.weixin.qq.com/miniprogram/dev/wxcloudrun/src/scene/build/speed.html)
 # 选择构建用基础镜像。如需更换，请到[dockerhub官方仓库](https://hub.docker.com/_/java?tab=tags)自行选择后替换。
-FROM maven:3.6.0-jdk-8-slim as build
+# 使用维护中的 Maven + Temurin 8，避免旧镜像（如 3.6.0-jdk-8-slim）在拉依赖时的 TLS/兼容问题。
+FROM maven:3.9-eclipse-temurin-8 AS build
 
 # 指定构建过程中的工作目录
 WORKDIR /app
+
+# 云构建内存紧张时可适当加大；过小会导致编译/测试 OOM
+ENV MAVEN_OPTS="-Xmx1024m"
 
 # 将src目录下所有文件，拷贝到工作目录中src目录下（.gitignore/.dockerignore中文件除外）
 COPY src /app/src
@@ -13,7 +17,9 @@ COPY settings.xml pom.xml /app/
 
 # 执行代码编译命令
 # 自定义settings.xml, 选用国内镜像源以提高下载速度
-RUN mvn -s /app/settings.xml -f /app/pom.xml clean package
+# 流水线仅失败在测试阶段时，可临时验证：docker build --build-arg SKIP_TESTS=true .
+ARG SKIP_TESTS=false
+RUN mvn -B --no-transfer-progress -s /app/settings.xml -f /app/pom.xml clean package -DskipTests=${SKIP_TESTS}
 
 # 选择运行时基础镜像
 FROM alpine:3.13

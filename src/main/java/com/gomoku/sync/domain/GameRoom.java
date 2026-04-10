@@ -56,6 +56,11 @@ public class GameRoom {
     /** 同房间多局：首局为 1，每次「再来一局」RESET 后 +1，与 games.match_round、结算上报一致 */
     private int matchRound = 1;
 
+    /** 联机：各方上次成功发起悔棋申请的时间（毫秒）；新局 resetMatch 时清零 */
+    private static final long UNDO_REQUEST_COOLDOWN_MS = 10_000L;
+    private long lastUndoRequestWallClockMsBlack;
+    private long lastUndoRequestWallClockMsWhite;
+
     /**
      * 集群内该座位是否仍有连接（任一台实例上有 WebSocket 即 true，与 room_game_state 同步）。
      * 用于多实例下 STATE 中 blackConnected / whiteConnected。
@@ -441,6 +446,18 @@ public class GameRoom {
             if (pendingUndoRequesterColor != null) {
                 return "已有悔棋申请";
             }
+            long now = System.currentTimeMillis();
+            if (color == Stone.BLACK) {
+                if (lastUndoRequestWallClockMsBlack != 0
+                        && now - lastUndoRequestWallClockMsBlack < UNDO_REQUEST_COOLDOWN_MS) {
+                    return "10秒内不可再次发起悔棋";
+                }
+            } else {
+                if (lastUndoRequestWallClockMsWhite != 0
+                        && now - lastUndoRequestWallClockMsWhite < UNDO_REQUEST_COOLDOWN_MS) {
+                    return "10秒内不可再次发起悔棋";
+                }
+            }
             if (moveHistory.isEmpty()) {
                 return "没有可悔的棋";
             }
@@ -462,6 +479,11 @@ public class GameRoom {
             }
             pendingUndoRequesterColor = color;
             pendingUndoPops = pops;
+            if (color == Stone.BLACK) {
+                lastUndoRequestWallClockMsBlack = now;
+            } else {
+                lastUndoRequestWallClockMsWhite = now;
+            }
             return null;
         } finally {
             lock.unlock();
@@ -723,6 +745,8 @@ public class GameRoom {
             pendingUndoPops = 0;
             pendingRematchRequesterColor = null;
             pendingDrawRequesterColor = null;
+            lastUndoRequestWallClockMsBlack = 0;
+            lastUndoRequestWallClockMsWhite = 0;
         } finally {
             lock.unlock();
         }
