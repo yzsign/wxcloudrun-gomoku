@@ -10,4 +10,10 @@
     <insert id="insertIgnore">
         INSERT IGNORE INTO daily_puzzle_schedule (puzzle_date, puzzle_id) VALUES (#{puzzleDate}, #{puzzleId})
     </insert>
+
+    <insert id="upsert">
+        INSERT INTO daily_puzzle_schedule (puzzle_date, puzzle_id)
+        VALUES (#{puzzleDate}, #{puzzleId})
+        ON DUPLICATE KEY UPDATE puzzle_id = VALUES(puzzle_id)
+    </insert>
 </mapper>

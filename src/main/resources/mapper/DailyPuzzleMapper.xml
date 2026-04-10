@@ -44,4 +44,26 @@
                 #{maxUserMoves,jdbcType=INTEGER}, #{solutionMovesJson,jdbcType=LONGVARCHAR},
                 #{hintText,jdbcType=VARCHAR}, #{status})
     </insert>
+
+    <update id="update">
+        UPDATE daily_puzzle
+        SET title = #{title},
+            difficulty = #{difficulty},
+            board_size = #{boardSize},
+            board_json = #{boardJson},
+            side_to_move = #{sideToMove},
+            goal = #{goal},
+            max_user_moves = #{maxUserMoves,jdbcType=INTEGER},
+            solution_moves_json = #{solutionMovesJson,jdbcType=LONGVARCHAR},
+            hint_text = #{hintText,jdbcType=VARCHAR},
+            status = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <select id="selectAllOrderByIdDesc" resultMap="DailyPuzzleResult">
+        SELECT <include refid="Cols"/>
+        FROM daily_puzzle
+        ORDER BY id DESC
+        LIMIT #{limit}
+    </select>
 </mapper>
