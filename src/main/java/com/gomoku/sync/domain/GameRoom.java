@@ -61,9 +61,9 @@ public class GameRoom {
     private long lastUndoRequestWallClockMsBlack;
     private long lastUndoRequestWallClockMsWhite;
 
-    /** 随机匹配 / 好友对战：每步 60s，超时当前行棋方负；自第一手起全局 10min 和棋 */
-    public static final long CLOCK_MOVE_MS = 60_000L;
-    public static final long CLOCK_GAME_MS = 600_000L;
+    /** 随机匹配 / 好友对战：每步 30s，超时当前行棋方负；自第一手起全局 30min 和棋 */
+    public static final long CLOCK_MOVE_MS = 30_000L;
+    public static final long CLOCK_GAME_MS = 1_800_000L;
     public static final String END_REASON_TIME_DRAW = "TIME_DRAW";
     public static final String END_REASON_MOVE_TIMEOUT = "MOVE_TIMEOUT";
 
@@ -116,7 +116,7 @@ public class GameRoom {
         }
     }
 
-    /** 悔棋同意：暂停期间只顺延全局时限，应手后轮到谁下谁得满 60s */
+    /** 悔棋同意：暂停期间只顺延全局时限，应手后轮到谁下谁得满 30s */
     private void endClockPauseBeforeUndoAccept() {
         long now = System.currentTimeMillis();
         if (clockPauseStartedWallMs > 0L) {
@@ -129,7 +129,7 @@ public class GameRoom {
     }
 
     /**
-     * 多实例下由快照恢复时补全旧数据；对局未结束且读秒未设置时给默认 60s。
+     * 多实例下由快照恢复时补全旧数据；对局未结束且读秒未设置时给默认 30s。
      */
     private void ensureClockDeadlinesFromSnapshot() {
         if (gameOver) {
