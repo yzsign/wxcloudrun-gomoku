@@ -61,6 +61,18 @@ public class GameRoom {
     private long lastUndoRequestWallClockMsBlack;
     private long lastUndoRequestWallClockMsWhite;
 
+    /** 随机匹配 / 好友对战：每步 60s，超时当前行棋方负；自第一手起全局 10min 和棋 */
+    public static final long CLOCK_MOVE_MS = 60_000L;
+    public static final long CLOCK_GAME_MS = 600_000L;
+    public static final String END_REASON_TIME_DRAW = "TIME_DRAW";
+    public static final String END_REASON_MOVE_TIMEOUT = "MOVE_TIMEOUT";
+
+    private long clockMoveDeadlineWallMs;
+    private long clockGameDeadlineWallMs;
+    private long clockPauseStartedWallMs;
+    /** 终局原因，仅时钟类终局写入 */
+    private String gameEndReason;
+
     /**
      * 集群内该座位是否仍有连接（任一台实例上有 WebSocket 即 true，与 room_game_state 同步）。
      * 用于多实例下 STATE 中 blackConnected / whiteConnected。
@@ -75,6 +87,125 @@ public class GameRoom {
         this.blackToken = blackToken;
         this.blackUserId = blackUserId;
         this.board = new int[size][size];
+        initClockForFreshBoard();
+    }
+
+    private void initClockForFreshBoard() {
+        long now = System.currentTimeMillis();
+        clockGameDeadlineWallMs = 0L;
+        clockPauseStartedWallMs = 0L;
+        gameEndReason = null;
+        clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
+    }
+
+    private void startClockPause() {
+        if (clockPauseStartedWallMs == 0L) {
+            clockPauseStartedWallMs = System.currentTimeMillis();
+        }
+    }
+
+    private void endClockPauseExtendBothDeadlines() {
+        long now = System.currentTimeMillis();
+        if (clockPauseStartedWallMs > 0L) {
+            long pd = now - clockPauseStartedWallMs;
+            clockMoveDeadlineWallMs += pd;
+            if (clockGameDeadlineWallMs > 0L) {
+                clockGameDeadlineWallMs += pd;
+            }
+            clockPauseStartedWallMs = 0L;
+        }
+    }
+
+    /** 悔棋同意：暂停期间只顺延全局时限，应手后轮到谁下谁得满 60s */
+    private void endClockPauseBeforeUndoAccept() {
+        long now = System.currentTimeMillis();
+        if (clockPauseStartedWallMs > 0L) {
+            long pd = now - clockPauseStartedWallMs;
+            if (clockGameDeadlineWallMs > 0L) {
+                clockGameDeadlineWallMs += pd;
+            }
+            clockPauseStartedWallMs = 0L;
+        }
+    }
+
+    /**
+     * 多实例下由快照恢复时补全旧数据；对局未结束且读秒未设置时给默认 60s。
+     */
+    private void ensureClockDeadlinesFromSnapshot() {
+        if (gameOver) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (clockMoveDeadlineWallMs <= 0L) {
+            clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
+        }
+    }
+
+    /**
+     * 若已满足超时或全局和棋条件则终局并返回 true（须由调用方持久化并广播）。
+     */
+    public boolean applyClockTimeoutsIfDue() {
+        lock.lock();
+        try {
+            if (gameOver) {
+                return false;
+            }
+            if (clockPauseStartedWallMs > 0L) {
+                return false;
+            }
+            long now = System.currentTimeMillis();
+            if (clockGameDeadlineWallMs > 0L && now >= clockGameDeadlineWallMs) {
+                gameOver = true;
+                winner = null;
+                gameEndReason = END_REASON_TIME_DRAW;
+                return true;
+            }
+            if (clockMoveDeadlineWallMs > 0L && now >= clockMoveDeadlineWallMs) {
+                gameOver = true;
+                winner = oppositeColor(current);
+                gameEndReason = END_REASON_MOVE_TIMEOUT;
+                return true;
+            }
+            return false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public long getClockMoveDeadlineWallMs() {
+        lock.lock();
+        try {
+            return clockMoveDeadlineWallMs;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public long getClockGameDeadlineWallMs() {
+        lock.lock();
+        try {
+            return clockGameDeadlineWallMs;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean isClockPaused() {
+        lock.lock();
+        try {
+            return clockPauseStartedWallMs > 0L;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public String getGameEndReason() {
+        lock.lock();
+        try {
+            return gameEndReason;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public long getBlackUserId() {
@@ -313,6 +444,7 @@ public class GameRoom {
             clusterWhiteConnected = cb;
 
             refreshWebSocketSeatColorsFromTokens();
+            initClockForFreshBoard();
         } finally {
             lock.unlock();
         }
@@ -484,6 +616,7 @@ public class GameRoom {
             } else {
                 lastUndoRequestWallClockMsWhite = now;
             }
+            startClockPause();
             return null;
         } finally {
             lock.unlock();
@@ -508,6 +641,7 @@ public class GameRoom {
                 return "已有和棋申请";
             }
             pendingDrawRequesterColor = color;
+            startClockPause();
             return null;
         } finally {
             lock.unlock();
@@ -529,6 +663,7 @@ public class GameRoom {
             gameOver = true;
             winner = null;
             pendingDrawRequesterColor = null;
+            clockPauseStartedWallMs = 0L;
             return null;
         } finally {
             lock.unlock();
@@ -547,6 +682,7 @@ public class GameRoom {
             if (color != oppositeColor(pendingDrawRequesterColor)) {
                 return "须由对方回应";
             }
+            endClockPauseExtendBothDeadlines();
             pendingDrawRequesterColor = null;
             return null;
         } finally {
@@ -563,6 +699,7 @@ public class GameRoom {
             if (pendingDrawRequesterColor != color) {
                 return "仅申请人可取消";
             }
+            endClockPauseExtendBothDeadlines();
             pendingDrawRequesterColor = null;
             return null;
         } finally {
@@ -605,9 +742,11 @@ public class GameRoom {
             } else {
                 return "悔棋数据异常";
             }
+            endClockPauseBeforeUndoAccept();
             applyUndoPops(pops);
             pendingUndoRequesterColor = null;
             pendingUndoPops = 0;
+            clockMoveDeadlineWallMs = System.currentTimeMillis() + CLOCK_MOVE_MS;
             return null;
         } finally {
             lock.unlock();
@@ -626,6 +765,7 @@ public class GameRoom {
             if (color != oppositeColor(pendingUndoRequesterColor)) {
                 return "须由对方回应";
             }
+            endClockPauseExtendBothDeadlines();
             pendingUndoRequesterColor = null;
             pendingUndoPops = 0;
             return null;
@@ -644,6 +784,7 @@ public class GameRoom {
             if (pendingUndoRequesterColor != color) {
                 return "仅申请人可取消";
             }
+            endClockPauseExtendBothDeadlines();
             pendingUndoRequesterColor = null;
             pendingUndoPops = 0;
             return null;
@@ -691,14 +832,21 @@ public class GameRoom {
             }
             board[r][c] = color;
             moveHistory.addLast(new RecordedMove(r, c, color));
+            long now = System.currentTimeMillis();
+            if (moveHistory.size() == 1) {
+                clockGameDeadlineWallMs = now + CLOCK_GAME_MS;
+            }
             if (WinChecker.checkWin(board, size, r, c, color)) {
                 gameOver = true;
                 winner = color;
+                gameEndReason = null;
             } else if (WinChecker.boardFull(board, size)) {
                 gameOver = true;
                 winner = null;
+                gameEndReason = null;
             } else {
                 current = color == Stone.BLACK ? Stone.WHITE : Stone.BLACK;
+                clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
             }
             return null;
         } finally {
@@ -720,8 +868,10 @@ public class GameRoom {
             pendingUndoRequesterColor = null;
             pendingUndoPops = 0;
             pendingDrawRequesterColor = null;
+            clockPauseStartedWallMs = 0L;
             gameOver = true;
             winner = oppositeColor(color);
+            gameEndReason = null;
             return null;
         } finally {
             lock.unlock();
@@ -747,6 +897,7 @@ public class GameRoom {
             pendingDrawRequesterColor = null;
             lastUndoRequestWallClockMsBlack = 0;
             lastUndoRequestWallClockMsWhite = 0;
+            initClockForFreshBoard();
         } finally {
             lock.unlock();
         }
@@ -871,6 +1022,10 @@ public class GameRoom {
             s.setPendingDrawRequesterColor(pendingDrawRequesterColor);
             s.setClusterBlackConnected(clusterBlackConnected);
             s.setClusterWhiteConnected(clusterWhiteConnected);
+            s.setClockMoveDeadlineWallMs(clockMoveDeadlineWallMs);
+            s.setClockGameDeadlineWallMs(clockGameDeadlineWallMs);
+            s.setClockPauseStartedWallMs(clockPauseStartedWallMs);
+            s.setGameEndReason(gameEndReason);
             List<GameRoomStateSnapshot.MoveRecord> list = new ArrayList<>();
             for (RecordedMove m : moveHistory) {
                 list.add(new GameRoomStateSnapshot.MoveRecord(m.r, m.c, m.color));
@@ -912,12 +1067,17 @@ public class GameRoom {
             clusterWhiteConnected = snap.isClusterWhiteConnected();
             pendingRematchRequesterColor = snap.getPendingRematchRequesterColor();
             pendingDrawRequesterColor = snap.getPendingDrawRequesterColor();
+            clockMoveDeadlineWallMs = snap.getClockMoveDeadlineWallMs();
+            clockGameDeadlineWallMs = snap.getClockGameDeadlineWallMs();
+            clockPauseStartedWallMs = snap.getClockPauseStartedWallMs();
+            gameEndReason = snap.getGameEndReason();
             moveHistory.clear();
             if (snap.getMoves() != null) {
                 for (GameRoomStateSnapshot.MoveRecord m : snap.getMoves()) {
                     moveHistory.addLast(new RecordedMove(m.r, m.c, m.color));
                 }
             }
+            ensureClockDeadlinesFromSnapshot();
         } finally {
             lock.unlock();
         }

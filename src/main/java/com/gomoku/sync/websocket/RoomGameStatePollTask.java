@@ -35,7 +35,11 @@ public class RoomGameStatePollTask {
             if (room == null) {
                 continue;
             }
-            if (roomGameStateService.pollApplyIfNewer(roomId, room)) {
+            boolean dbNewer = roomGameStateService.pollApplyIfNewer(roomId, room);
+            if (room.applyClockTimeoutsIfDue()) {
+                roomGameStateService.tryPersist(room);
+                gomokuWebSocketHandler.broadcastState(room);
+            } else if (dbNewer) {
                 gomokuWebSocketHandler.broadcastState(room);
                 gomokuWebSocketHandler.maybePlayBot(room);
             }

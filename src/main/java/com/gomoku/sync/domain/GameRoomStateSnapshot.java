@@ -28,6 +28,22 @@ public class GameRoomStateSnapshot {
     private boolean clusterBlackConnected;
     private boolean clusterWhiteConnected;
 
+    /**
+     * 当前行棋方须在此时刻前落子，否则判超时负（Unix 毫秒，墙钟）。
+     * 0 表示未初始化（旧快照兼容时由内存侧补全）。
+     */
+    private long clockMoveDeadlineWallMs;
+    /**
+     * 本局总时限：自第一手起算，超过判和棋（Unix 毫秒）；0 表示尚未落子。
+     */
+    private long clockGameDeadlineWallMs;
+    /** 非 0 表示因悔棋/和棋申请而暂停读秒，值为暂停开始时刻 */
+    private long clockPauseStartedWallMs;
+    /**
+     * 终局原因：null 或空为普通终局；TIME_DRAW=总时限和棋；MOVE_TIMEOUT=当前行棋方思考超时负。
+     */
+    private String gameEndReason;
+
     public static GameRoomStateSnapshot empty(int boardSize) {
         GameRoomStateSnapshot s = new GameRoomStateSnapshot();
         s.boardSize = boardSize;
@@ -43,6 +59,10 @@ public class GameRoomStateSnapshot {
         s.pendingDrawRequesterColor = null;
         s.clusterBlackConnected = false;
         s.clusterWhiteConnected = false;
+        s.clockMoveDeadlineWallMs = 0L;
+        s.clockGameDeadlineWallMs = 0L;
+        s.clockPauseStartedWallMs = 0L;
+        s.gameEndReason = null;
         return s;
     }
 
@@ -148,6 +168,38 @@ public class GameRoomStateSnapshot {
 
     public void setClusterWhiteConnected(boolean clusterWhiteConnected) {
         this.clusterWhiteConnected = clusterWhiteConnected;
+    }
+
+    public long getClockMoveDeadlineWallMs() {
+        return clockMoveDeadlineWallMs;
+    }
+
+    public void setClockMoveDeadlineWallMs(long clockMoveDeadlineWallMs) {
+        this.clockMoveDeadlineWallMs = clockMoveDeadlineWallMs;
+    }
+
+    public long getClockGameDeadlineWallMs() {
+        return clockGameDeadlineWallMs;
+    }
+
+    public void setClockGameDeadlineWallMs(long clockGameDeadlineWallMs) {
+        this.clockGameDeadlineWallMs = clockGameDeadlineWallMs;
+    }
+
+    public long getClockPauseStartedWallMs() {
+        return clockPauseStartedWallMs;
+    }
+
+    public void setClockPauseStartedWallMs(long clockPauseStartedWallMs) {
+        this.clockPauseStartedWallMs = clockPauseStartedWallMs;
+    }
+
+    public String getGameEndReason() {
+        return gameEndReason;
+    }
+
+    public void setGameEndReason(String gameEndReason) {
+        this.gameEndReason = gameEndReason;
     }
 
     public static class MoveRecord {

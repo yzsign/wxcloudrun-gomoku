@@ -145,6 +145,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
         roomSessionTracker.register(roomId);
 
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        applyOnlineClockTimeouts(room);
         broadcastState(room);
         maybePlayBot(room);
     }
@@ -192,8 +194,24 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    /** 调用前须已 {@link RoomGameStateService#syncRoomFromDbIfBehind(GameRoom)} */
+    private boolean applyOnlineClockTimeouts(GameRoom room) {
+        if (!room.applyClockTimeoutsIfDue()) {
+            return false;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+        }
+        return true;
+    }
+
     private void handleMove(WebSocketSession session, GameRoom room, int color, JsonNode root) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         int r = root.path("r").asInt(-1);
         int c = root.path("c").asInt(-1);
         String err = room.tryMove(color, r, c);
@@ -213,6 +231,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleUndoRequest(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         String err = room.requestUndo(color);
         if (err != null) {
             sendToSession(session, error(err));
@@ -244,6 +267,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleUndoAccept(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         String err = room.acceptUndo(color);
         if (err != null) {
             sendToSession(session, error(err));
@@ -261,6 +289,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleUndoReject(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         String err = room.rejectUndo(color);
         if (err != null) {
             sendToSession(session, error(err));
@@ -278,6 +311,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleUndoCancel(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         cancelPendingBotUndoResponse(room.getRoomId());
         String err = room.cancelUndoRequest(color);
         if (err != null) {
@@ -296,6 +334,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleDrawRequest(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         String err = room.requestDraw(color);
         if (err != null) {
             sendToSession(session, error(err));
@@ -327,6 +370,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleDrawAccept(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         cancelPendingBotDrawResponse(room.getRoomId());
         String err = room.acceptDraw(color);
         if (err != null) {
@@ -345,6 +393,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleDrawReject(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         cancelPendingBotDrawResponse(room.getRoomId());
         String err = room.rejectDraw(color);
         if (err != null) {
@@ -363,6 +416,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleDrawCancel(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         cancelPendingBotDrawResponse(room.getRoomId());
         String err = room.cancelDrawRequest(color);
         if (err != null) {
@@ -381,6 +439,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleResign(WebSocketSession session, GameRoom room, int color) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
         cancelPendingBotTasks(room.getRoomId());
         String err = room.tryResign(color);
         if (err != null) {
@@ -515,6 +578,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
      */
     public void maybePlayBot(GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            broadcastState(room);
+            return;
+        }
         if (!room.isWhiteIsBot() || room.isGameOver()) {
             return;
         }
@@ -555,6 +622,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     /** 立即执行人机落子（调用前已确认轮到白棋等条件）。 */
     private void playBotMoveIfStillValid(GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (applyOnlineClockTimeouts(room)) {
+            broadcastState(room);
+            return;
+        }
         if (!room.isWhiteIsBot() || room.isGameOver()) {
             return;
         }
@@ -818,6 +889,15 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 n.putNull("drawRequesterColor");
             } else {
                 n.put("drawRequesterColor", room.getPendingDrawRequesterColor());
+            }
+            n.put("clockMoveDeadlineWallMs", room.getClockMoveDeadlineWallMs());
+            n.put("clockGameDeadlineWallMs", room.getClockGameDeadlineWallMs());
+            n.put("clockPaused", room.isClockPaused());
+            String ger = room.getGameEndReason();
+            if (ger == null || ger.isEmpty()) {
+                n.putNull("gameEndReason");
+            } else {
+                n.put("gameEndReason", ger);
             }
             return new TextMessage(objectMapper.writeValueAsString(n));
         } catch (Exception e) {
