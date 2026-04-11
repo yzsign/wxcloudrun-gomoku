@@ -15,7 +15,9 @@ public interface RoomParticipantMapper {
             @Param("blackUserId") long blackUserId,
             @Param("blackToken") String blackToken,
             @Param("observerUserId") long observerUserId,
-            @Param("observerToken") String observerToken);
+            @Param("observerToken") String observerToken,
+            @Param("puzzleInitBoardJson") String puzzleInitBoardJson,
+            @Param("puzzleSideToMove") int puzzleSideToMove);
 
     int updateWhite(
             @Param("roomId") String roomId,
@@ -33,6 +35,14 @@ public interface RoomParticipantMapper {
     int updateBotMeta(
             @Param("roomId") String roomId,
             @Param("whiteIsBot") boolean whiteIsBot,
+            @Param("dmin") int dmin,
+            @Param("dmax") int dmax,
+            @Param("botAiStyle") int botAiStyle);
+
+    int updatePuzzleRoomBots(
+            @Param("roomId") String roomId,
+            @Param("whiteIsBot") boolean whiteIsBot,
+            @Param("blackIsBot") boolean blackIsBot,
             @Param("dmin") int dmin,
             @Param("dmax") int dmax,
             @Param("botAiStyle") int botAiStyle);

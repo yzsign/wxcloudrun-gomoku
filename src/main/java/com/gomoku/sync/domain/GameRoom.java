@@ -28,6 +28,8 @@ public class GameRoom {
     private Long whiteUserId;
     /** 随机匹配超时接入的数据库人机：无 WebSocket，由服务端代下白棋 */
     private boolean whiteIsBot;
+    /** 残局好友房：黑方为人机时由服务端代下黑棋 */
+    private boolean blackIsBot;
     /** 白方为人机时：该人机账号在 DB 中配置的搜索深度区间（入座时写入；每步在区间内随机） */
     private int botSearchDepthMin = 2;
     private int botSearchDepthMax = 3;
@@ -88,11 +90,17 @@ public class GameRoom {
     private WebSocketSession spectatorSession;
 
     /**
-     * 残局好友房：邀请时的盘面与下一手；好友首次入座白方时 {@link #tryApplyPuzzleFriendJoinResetOnce()} 恢复至此状态。
+     * 残局好友房：邀请时的盘面与下一手；好友首次连白方 WS 时 {@link #tryApplyPuzzleFriendJoinResetOnce()} 可恢复至此（与
+     * puzzleTemplate 一致；HTTP 加入时已 {@link #restoreLiveStateFromPuzzleTemplate(boolean)} 则跳过）。
      */
     private int[][] puzzleFriendBaselineBoard;
     private int puzzleFriendBaselineCurrent = Stone.BLACK;
     private boolean puzzleFriendJoinResetDone;
+
+    /** 残局好友房：创建时持久化于 DB 的盘面与下一手，好友 HTTP 进房时从此重置（多实例一致） */
+    private int[][] puzzleTemplateBoard;
+
+    private Integer puzzleTemplateSideToMove;
 
     public GameRoom(String roomId, int size, String blackToken, long blackUserId) {
         this.roomId = roomId;
@@ -279,6 +287,91 @@ public class GameRoom {
         this.whiteIsBot = whiteIsBot;
     }
 
+    public boolean isBlackIsBot() {
+        return blackIsBot;
+    }
+
+    public void setBlackIsBot(boolean blackIsBot) {
+        this.blackIsBot = blackIsBot;
+    }
+
+    /**
+     * 深拷贝保存残局模板；sideToMove 须为 {@link Stone#BLACK} 或 {@link Stone#WHITE}。
+     */
+    public void setPuzzleTemplate(int[][] src, int sideToMove) {
+        lock.lock();
+        try {
+            if (src == null || src.length != size) {
+                throw new IllegalArgumentException("puzzle template board invalid");
+            }
+            if (sideToMove != Stone.BLACK && sideToMove != Stone.WHITE) {
+                throw new IllegalArgumentException("puzzle template sideToMove invalid");
+            }
+            puzzleTemplateBoard = new int[size][size];
+            for (int i = 0; i < size; i++) {
+                System.arraycopy(src[i], 0, puzzleTemplateBoard[i], 0, size);
+            }
+            puzzleTemplateSideToMove = sideToMove;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean hasPuzzleTemplate() {
+        lock.lock();
+        try {
+            return puzzleTemplateBoard != null && puzzleTemplateSideToMove != null;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public Integer getPuzzleTemplateSideToMove() {
+        lock.lock();
+        try {
+            return puzzleTemplateSideToMove;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 从残局模板恢复当前对局（好友首次进房或再来一局）。
+     *
+     * @param bumpMatchRound 是否递增局次（好友进房为 false，再来一局为 true）
+     */
+    public void restoreLiveStateFromPuzzleTemplate(boolean bumpMatchRound) {
+        lock.lock();
+        try {
+            if (puzzleTemplateBoard == null || puzzleTemplateSideToMove == null) {
+                throw new IllegalStateException("puzzle template missing");
+            }
+            if (bumpMatchRound) {
+                matchRound++;
+            }
+            for (int i = 0; i < size; i++) {
+                System.arraycopy(puzzleTemplateBoard[i], 0, board[i], 0, size);
+            }
+            current = puzzleTemplateSideToMove;
+            gameOver = false;
+            winner = null;
+            moveHistory.clear();
+            pendingUndoRequesterColor = null;
+            pendingUndoPops = 0;
+            pendingRematchRequesterColor = null;
+            pendingDrawRequesterColor = null;
+            clockPauseStartedWallMs = 0L;
+            gameEndReason = null;
+            lastUndoRequestWallClockMsBlack = 0;
+            lastUndoRequestWallClockMsWhite = 0;
+            long now = System.currentTimeMillis();
+            clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
+            clockGameDeadlineWallMs = countStones() > 0 ? now + CLOCK_GAME_MS : 0L;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     /**
      * 人机入座时由匹配服务根据 users.bot_search_depth_* 设置；非人机可忽略。
      */
@@ -442,7 +535,7 @@ public class GameRoom {
     public void swapHumanSeats() {
         lock.lock();
         try {
-            if (whiteIsBot) {
+            if (whiteIsBot || blackIsBot) {
                 throw new IllegalStateException("人机局不可交换座位");
             }
             if (whiteToken == null || whiteUserId == null) {
@@ -955,9 +1048,19 @@ public class GameRoom {
             if (pendingDrawRequesterColor != null) {
                 return "请先处理和棋申请";
             }
-            if (whiteIsBot && color == Stone.BLACK) {
+            if (!puzzleRoom && whiteIsBot && color == Stone.BLACK) {
                 resetMatch();
                 return null;
+            }
+            if (puzzleRoom && hasPuzzleTemplate()) {
+                if (blackIsBot && color == Stone.WHITE) {
+                    restoreLiveStateFromPuzzleTemplate(true);
+                    return null;
+                }
+                if (whiteIsBot && color == Stone.BLACK) {
+                    restoreLiveStateFromPuzzleTemplate(true);
+                    return null;
+                }
             }
             if (pendingRematchRequesterColor != null
                     && !pendingRematchRequesterColor.equals(color)) {
@@ -985,7 +1088,11 @@ public class GameRoom {
             if (pendingRematchRequesterColor == color) {
                 return "需由对方同意";
             }
-            resetMatch();
+            if (puzzleRoom && hasPuzzleTemplate()) {
+                restoreLiveStateFromPuzzleTemplate(true);
+            } else {
+                resetMatch();
+            }
             return null;
         } finally {
             lock.unlock();

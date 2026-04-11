@@ -1,5 +1,6 @@
 package com.gomoku.sync.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomParticipant;
@@ -19,15 +20,18 @@ public class RoomService {
     private final int boardSize;
     private final RoomParticipantMapper roomParticipantMapper;
     private final RoomGameStateService roomGameStateService;
+    private final ObjectMapper objectMapper;
     private final Map<String, GameRoom> rooms = new ConcurrentHashMap<>();
 
     public RoomService(
             @Value("${gomoku.board-size:15}") int boardSize,
             RoomParticipantMapper roomParticipantMapper,
-            RoomGameStateService roomGameStateService) {
+            RoomGameStateService roomGameStateService,
+            ObjectMapper objectMapper) {
         this.boardSize = boardSize;
         this.roomParticipantMapper = roomParticipantMapper;
         this.roomGameStateService = roomGameStateService;
+        this.objectMapper = objectMapper;
     }
 
     public int getBoardSize() {
@@ -67,8 +71,16 @@ public class RoomService {
         room.setSpectatorToken(spectatorToken);
         rooms.put(roomId, room);
         try {
+            room.setPuzzleTemplate(board, sideToMove);
+            String boardJson = objectMapper.writeValueAsString(board);
             roomParticipantMapper.insertPuzzleBlack(
-                    roomId, creatorUserId, blackToken, creatorUserId, spectatorToken);
+                    roomId,
+                    creatorUserId,
+                    blackToken,
+                    creatorUserId,
+                    spectatorToken,
+                    boardJson,
+                    sideToMove);
             roomGameStateService.insertPuzzleInitial(roomId, board, sideToMove);
             roomGameStateService.hydrateRoom(room);
             room.capturePuzzleFriendBaselineFromRoomState();
@@ -109,23 +121,26 @@ public class RoomService {
                 && rp.getWhiteUserId() != null) {
             room.setWhiteToken(rp.getWhiteToken());
             room.setWhiteUserId(rp.getWhiteUserId());
-            if (rp.isWhiteIsBot()) {
-                room.setWhiteIsBot(true);
-                int dmin = rp.getBotSearchDepthMin() != null ? rp.getBotSearchDepthMin() : 2;
-                int dmax = rp.getBotSearchDepthMax() != null ? rp.getBotSearchDepthMax() : 3;
-                if (dmin > dmax) {
-                    int t = dmin;
-                    dmin = dmax;
-                    dmax = t;
-                }
-                room.setBotSearchDepthRange(dmin, dmax);
-                Integer style = rp.getBotAiStyle();
-                int ord =
-                        style != null
-                                ? style
-                                : BotAiStyle.forBotUserId(rp.getWhiteUserId()).ordinal();
-                room.setBotAiStyleOrdinal(ord);
+        }
+        if (rp.isWhiteIsBot() || rp.isBlackIsBot()) {
+            room.setWhiteIsBot(rp.isWhiteIsBot());
+            room.setBlackIsBot(rp.isBlackIsBot());
+            int dmin = rp.getBotSearchDepthMin() != null ? rp.getBotSearchDepthMin() : 2;
+            int dmax = rp.getBotSearchDepthMax() != null ? rp.getBotSearchDepthMax() : 3;
+            if (dmin > dmax) {
+                int t = dmin;
+                dmin = dmax;
+                dmax = t;
             }
+            room.setBotSearchDepthRange(dmin, dmax);
+            Integer style = rp.getBotAiStyle();
+            int ord =
+                    style != null
+                            ? style
+                            : (rp.isWhiteIsBot() && rp.getWhiteUserId() != null
+                                    ? BotAiStyle.forBotUserId(rp.getWhiteUserId()).ordinal()
+                                    : BotAiStyle.randomOrdinal());
+            room.setBotAiStyleOrdinal(ord);
         }
         if (rp.isPuzzleRoom()) {
             room.setPuzzleRoom(true);
@@ -134,6 +149,18 @@ public class RoomService {
             }
             if (rp.getObserverUserId() != null) {
                 room.setObserverUserId(rp.getObserverUserId());
+            }
+            if (rp.getPuzzleInitBoardJson() != null
+                    && !rp.getPuzzleInitBoardJson().trim().isEmpty()
+                    && rp.getPuzzleSideToMove() != null) {
+                try {
+                    int[][] tpl =
+                            objectMapper.readValue(rp.getPuzzleInitBoardJson(), int[][].class);
+                    DailyPuzzleAdminService.validateBoardCells(tpl, boardSize);
+                    room.setPuzzleTemplate(tpl, rp.getPuzzleSideToMove());
+                } catch (Exception ignored) {
+                    // 无模板时好友进房无法启用人机，兼容旧数据
+                }
             }
         }
         roomGameStateService.hydrateRoom(room);
@@ -176,6 +203,27 @@ public class RoomService {
                 room.setWhiteUserId(null);
                 return JoinResult.notFound();
             }
+            if (room.isPuzzleRoom() && room.hasPuzzleTemplate()) {
+                room.restoreLiveStateFromPuzzleTemplate(false);
+                /** 好友固定坐白方，人机始终为黑方（与下一手先后无关） */
+                room.setBlackIsBot(true);
+                room.setWhiteIsBot(false);
+                int dmin = 2;
+                int dmax = 3;
+                int styleOrd = BotAiStyle.randomOrdinal();
+                room.setBotSearchDepthRange(dmin, dmax);
+                room.setBotAiStyleOrdinal(styleOrd);
+                roomParticipantMapper.updatePuzzleRoomBots(
+                        roomId,
+                        room.isWhiteIsBot(),
+                        room.isBlackIsBot(),
+                        dmin,
+                        dmax,
+                        styleOrd);
+                if (!roomGameStateService.tryPersist(room)) {
+                    roomGameStateService.forceReloadFromDb(room);
+                }
+            }
             return JoinResult.ok(whiteToken);
         }
     }
@@ -194,7 +242,7 @@ public class RoomService {
             if (room.isPuzzleRoom()) {
                 return false;
             }
-            if (room.isWhiteIsBot()) {
+            if (room.isWhiteIsBot() || room.isBlackIsBot()) {
                 return false;
             }
             if (!room.hasGuest()) {

@@ -10,12 +10,15 @@
         <result property="whiteUserId" column="white_user_id"/>
         <result property="whiteToken" column="white_token"/>
         <result property="whiteIsBot" column="white_is_bot"/>
+        <result property="blackIsBot" column="black_is_bot"/>
         <result property="botSearchDepthMin" column="bot_search_depth_min"/>
         <result property="botSearchDepthMax" column="bot_search_depth_max"/>
         <result property="botAiStyle" column="bot_ai_style"/>
         <result property="observerUserId" column="observer_user_id"/>
         <result property="observerToken" column="observer_token"/>
         <result property="puzzleRoom" column="puzzle_room"/>
+        <result property="puzzleInitBoardJson" column="puzzle_init_board_json"/>
+        <result property="puzzleSideToMove" column="puzzle_side_to_move"/>
     </resultMap>
 
     <insert id="insertBlack">
@@ -24,8 +27,10 @@
     </insert>
 
     <insert id="insertPuzzleBlack">
-        INSERT INTO room_participants (room_id, black_user_id, black_token, observer_user_id, observer_token, puzzle_room)
-        VALUES (#{roomId}, #{blackUserId}, #{blackToken}, #{observerUserId}, #{observerToken}, 1)
+        INSERT INTO room_participants (room_id, black_user_id, black_token, observer_user_id, observer_token, puzzle_room,
+                                       puzzle_init_board_json, puzzle_side_to_move)
+        VALUES (#{roomId}, #{blackUserId}, #{blackToken}, #{observerUserId}, #{observerToken}, 1,
+                #{puzzleInitBoardJson}, #{puzzleSideToMove})
     </insert>
 
     <update id="updateWhite">
@@ -58,10 +63,20 @@
         WHERE room_id = #{roomId}
     </update>
 
+    <update id="updatePuzzleRoomBots">
+        UPDATE room_participants
+        SET white_is_bot = #{whiteIsBot},
+            black_is_bot = #{blackIsBot},
+            bot_search_depth_min = #{dmin},
+            bot_search_depth_max = #{dmax},
+            bot_ai_style = #{botAiStyle}
+        WHERE room_id = #{roomId}
+    </update>
+
     <select id="selectByRoomId" resultMap="RoomParticipantResult">
         SELECT room_id, black_user_id, black_token, white_user_id, white_token,
-               white_is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style,
-               observer_user_id, observer_token, puzzle_room
+               white_is_bot, black_is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style,
+               observer_user_id, observer_token, puzzle_room, puzzle_init_board_json, puzzle_side_to_move
         FROM room_participants
         WHERE room_id = #{roomId}
         LIMIT 1

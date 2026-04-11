@@ -288,6 +288,20 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             scheduleBotUndoResponse(room);
             return;
         }
+        if (room.isBlackIsBot()
+                && room.isUndoPending()
+                && room.getPendingUndoRequesterColor() != null
+                && room.getPendingUndoRequesterColor() == Stone.WHITE) {
+            if (!roomGameStateService.tryPersist(room)) {
+                roomGameStateService.forceReloadFromDb(room);
+                sendToSession(session, error("对局状态已同步，请重试"));
+                broadcastState(room);
+                return;
+            }
+            broadcastState(room);
+            scheduleBlackBotUndoResponse(room);
+            return;
+        }
         if (!roomGameStateService.tryPersist(room)) {
             roomGameStateService.forceReloadFromDb(room);
             sendToSession(session, error("对局状态已同步，请重试"));
@@ -389,6 +403,20 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             }
             broadcastState(room);
             scheduleBotDrawResponse(room);
+            return;
+        }
+        if (room.isBlackIsBot()
+                && room.isDrawPending()
+                && room.getPendingDrawRequesterColor() != null
+                && room.getPendingDrawRequesterColor() == Stone.WHITE) {
+            if (!roomGameStateService.tryPersist(room)) {
+                roomGameStateService.forceReloadFromDb(room);
+                sendToSession(session, error("对局状态已同步，请重试"));
+                broadcastState(room);
+                return;
+            }
+            broadcastState(room);
+            scheduleBlackBotDrawResponse(room);
             return;
         }
         if (!roomGameStateService.tryPersist(room)) {
@@ -607,7 +635,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 白方为数据库人机时：轮到白且非悔棋待定时代为落子；随机延迟 1~5 秒再落子。
+     * 白方或黑方为人机时：轮到该色且非悔棋/和棋待定时代为落子；随机延迟 1~5 秒再落子。
      */
     public void maybePlayBot(GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
@@ -615,7 +643,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             broadcastState(room);
             return;
         }
-        if (!room.isWhiteIsBot() || room.isGameOver()) {
+        if (room.isGameOver()) {
             return;
         }
         if (room.isUndoPending()) {
@@ -624,7 +652,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         if (room.isDrawPending()) {
             return;
         }
-        if (room.getCurrent() != Stone.WHITE) {
+        int cur = room.getCurrent();
+        if (cur == Stone.WHITE && !room.isWhiteIsBot()) {
+            return;
+        }
+        if (cur == Stone.BLACK && !room.isBlackIsBot()) {
+            return;
+        }
+        if (cur != Stone.WHITE && cur != Stone.BLACK) {
             return;
         }
         String roomId = room.getRoomId();
@@ -652,14 +687,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         pendingBotMoves.put(roomId, holder[0]);
     }
 
-    /** 立即执行人机落子（调用前已确认轮到白棋等条件）。 */
+    /** 立即执行人机落子（调用前已确认轮到人机方等条件）。 */
     private void playBotMoveIfStillValid(GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
         if (applyOnlineClockTimeouts(room)) {
             broadcastState(room);
             return;
         }
-        if (!room.isWhiteIsBot() || room.isGameOver()) {
+        if (room.isGameOver()) {
             return;
         }
         if (room.isUndoPending()) {
@@ -668,7 +703,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         if (room.isDrawPending()) {
             return;
         }
-        if (room.getCurrent() != Stone.WHITE) {
+        int botColor = room.getCurrent();
+        if (botColor == Stone.WHITE && !room.isWhiteIsBot()) {
+            return;
+        }
+        if (botColor == Stone.BLACK && !room.isBlackIsBot()) {
             return;
         }
         int[][] copy = room.getBoardCopy();
@@ -677,11 +716,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 GomokuAiEngine.chooseMove(
                         copy,
                         size,
-                        Stone.WHITE,
+                        botColor,
                         GomokuAiEngine.nextBotSearchDepthInRange(
                                 room.getBotSearchDepthMin(), room.getBotSearchDepthMax()),
                         BotAiStyle.fromOrdinal(room.getBotAiStyleOrdinal()));
-        String err = room.tryMove(Stone.WHITE, mv[0], mv[1]);
+        String err = room.tryMove(botColor, mv[0], mv[1]);
         if (err != null) {
             return;
         }
@@ -744,6 +783,55 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         pendingBotUndoResponses.put(roomId, holder[0]);
     }
 
+    /** 黑方人机对白方悔棋：延迟应答。 */
+    private void scheduleBlackBotUndoResponse(GameRoom room) {
+        String roomId = room.getRoomId();
+        cancelPendingBotUndoResponse(roomId);
+        long delayMs = 1000L + ThreadLocalRandom.current().nextInt(2001);
+        ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
+        holder[0] =
+                botScheduler.schedule(
+                        () -> {
+                            try {
+                                if (holder[0].isCancelled()) {
+                                    return;
+                                }
+                                ScheduledFuture<?> current = pendingBotUndoResponses.get(roomId);
+                                if (current != holder[0]) {
+                                    return;
+                                }
+                                roomGameStateService.syncRoomFromDbIfBehind(room);
+                                if (!room.isBlackIsBot()
+                                        || !room.isUndoPending()
+                                        || room.getPendingUndoRequesterColor() == null
+                                        || room.getPendingUndoRequesterColor() != Stone.WHITE) {
+                                    return;
+                                }
+                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                String err =
+                                        reject
+                                                ? room.rejectUndo(Stone.BLACK)
+                                                : room.acceptUndo(Stone.BLACK);
+                                if (err != null) {
+                                    broadcastState(room);
+                                    return;
+                                }
+                                if (!roomGameStateService.tryPersist(room)) {
+                                    roomGameStateService.forceReloadFromDb(room);
+                                    broadcastState(room);
+                                    return;
+                                }
+                                broadcastState(room);
+                                maybePlayBot(room);
+                            } finally {
+                                pendingBotUndoResponses.remove(roomId, holder[0]);
+                            }
+                        },
+                        delayMs,
+                        TimeUnit.MILLISECONDS);
+        pendingBotUndoResponses.put(roomId, holder[0]);
+    }
+
     /** 人机对黑方和棋：延迟 1~3 秒后，70% 同意、30% 拒绝。 */
     private void scheduleBotDrawResponse(GameRoom room) {
         String roomId = room.getRoomId();
@@ -773,6 +861,54 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                                         reject
                                                 ? room.rejectDraw(Stone.WHITE)
                                                 : room.acceptDraw(Stone.WHITE);
+                                if (err != null) {
+                                    broadcastState(room);
+                                    return;
+                                }
+                                if (!roomGameStateService.tryPersist(room)) {
+                                    roomGameStateService.forceReloadFromDb(room);
+                                    broadcastState(room);
+                                    return;
+                                }
+                                broadcastState(room);
+                                maybePlayBot(room);
+                            } finally {
+                                pendingBotDrawResponses.remove(roomId, holder[0]);
+                            }
+                        },
+                        delayMs,
+                        TimeUnit.MILLISECONDS);
+        pendingBotDrawResponses.put(roomId, holder[0]);
+    }
+
+    private void scheduleBlackBotDrawResponse(GameRoom room) {
+        String roomId = room.getRoomId();
+        cancelPendingBotDrawResponse(roomId);
+        long delayMs = 1000L + ThreadLocalRandom.current().nextInt(2001);
+        ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
+        holder[0] =
+                botScheduler.schedule(
+                        () -> {
+                            try {
+                                if (holder[0].isCancelled()) {
+                                    return;
+                                }
+                                ScheduledFuture<?> current = pendingBotDrawResponses.get(roomId);
+                                if (current != holder[0]) {
+                                    return;
+                                }
+                                roomGameStateService.syncRoomFromDbIfBehind(room);
+                                if (!room.isBlackIsBot()
+                                        || !room.isDrawPending()
+                                        || room.getPendingDrawRequesterColor() == null
+                                        || room.getPendingDrawRequesterColor() != Stone.WHITE) {
+                                    return;
+                                }
+                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                String err =
+                                        reject
+                                                ? room.rejectDraw(Stone.BLACK)
+                                                : room.acceptDraw(Stone.BLACK);
                                 if (err != null) {
                                     broadcastState(room);
                                     return;
@@ -919,7 +1055,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 n.put("whitePieceSkinId", pieceSkinIdForSeat(whiteUid));
             }
             boolean blackHere =
-                    (room.getBlackSession() != null && room.getBlackSession().isOpen())
+                    room.isBlackIsBot()
+                            || (room.getBlackSession() != null && room.getBlackSession().isOpen())
                             || room.isClusterBlackConnected();
             n.put("blackConnected", blackHere);
             boolean whiteHere =
@@ -928,6 +1065,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                             || room.isClusterWhiteConnected();
             n.put("whiteConnected", whiteHere);
             n.put("whiteIsBot", room.isWhiteIsBot());
+            n.put("blackIsBot", room.isBlackIsBot());
             Integer pr = room.getPendingRematchRequesterColor();
             n.put("rematchPending", pr != null);
             if (pr == null) {

@@ -11,6 +11,7 @@ public class RoomParticipant {
     private Long whiteUserId;
     private String whiteToken;
     private boolean whiteIsBot;
+    private boolean blackIsBot;
     private Integer botSearchDepthMin;
     private Integer botSearchDepthMax;
     /** 人机棋风，见 BotAiStyle.ordinal；NULL 表示由 white_user_id 推导 */
@@ -19,6 +20,9 @@ public class RoomParticipant {
     private Long observerUserId;
     private String observerToken;
     private boolean puzzleRoom;
+    /** 与 createPuzzleFriendRoom 写入一致，供好友进房时重置盘面 */
+    private String puzzleInitBoardJson;
+    private Integer puzzleSideToMove;
 
     public String getRoomId() {
         return roomId;
@@ -68,6 +72,14 @@ public class RoomParticipant {
         this.whiteIsBot = whiteIsBot;
     }
 
+    public boolean isBlackIsBot() {
+        return blackIsBot;
+    }
+
+    public void setBlackIsBot(boolean blackIsBot) {
+        this.blackIsBot = blackIsBot;
+    }
+
     public Integer getBotSearchDepthMin() {
         return botSearchDepthMin;
     }
@@ -114,5 +126,21 @@ public class RoomParticipant {
 
     public void setPuzzleRoom(boolean puzzleRoom) {
         this.puzzleRoom = puzzleRoom;
+    }
+
+    public String getPuzzleInitBoardJson() {
+        return puzzleInitBoardJson;
+    }
+
+    public void setPuzzleInitBoardJson(String puzzleInitBoardJson) {
+        this.puzzleInitBoardJson = puzzleInitBoardJson;
+    }
+
+    public Integer getPuzzleSideToMove() {
+        return puzzleSideToMove;
+    }
+
+    public void setPuzzleSideToMove(Integer puzzleSideToMove) {
+        this.puzzleSideToMove = puzzleSideToMove;
     }
 }
