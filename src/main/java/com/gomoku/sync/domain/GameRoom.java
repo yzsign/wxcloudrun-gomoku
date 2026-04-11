@@ -171,6 +171,10 @@ public class GameRoom {
             if (gameOver) {
                 return false;
             }
+            /** 残局房（含好友残局）不设联机步时/局时终局 */
+            if (puzzleRoom) {
+                return false;
+            }
             if (clockPauseStartedWallMs > 0L) {
                 return false;
             }
@@ -182,19 +186,6 @@ public class GameRoom {
                 return true;
             }
             if (clockMoveDeadlineWallMs > 0L && now >= clockMoveDeadlineWallMs) {
-                if (puzzleRoom) {
-                    boolean blackMissing =
-                            current == Stone.BLACK
-                                    && (blackSession == null || !blackSession.isOpen());
-                    boolean whiteMissing =
-                            current == Stone.WHITE
-                                    && !whiteIsBot
-                                    && (whiteSession == null || !whiteSession.isOpen());
-                    if (blackMissing || whiteMissing) {
-                        clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
-                        return false;
-                    }
-                }
                 gameOver = true;
                 winner = oppositeColor(current);
                 gameEndReason = END_REASON_MOVE_TIMEOUT;

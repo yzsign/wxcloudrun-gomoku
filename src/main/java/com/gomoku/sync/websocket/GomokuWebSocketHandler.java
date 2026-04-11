@@ -1045,6 +1045,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 n.put("winner", room.getWinner());
             }
             n.put("matchRound", room.getMatchRound());
+            n.put("puzzleRoom", room.isPuzzleRoom());
             n.put("spectator", spectator);
             if (spectator) {
                 n.putNull("yourColor");
