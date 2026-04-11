@@ -18,8 +18,9 @@ COPY settings.xml pom.xml /app/
 # 执行代码编译命令
 # 自定义settings.xml, 选用国内镜像源以提高下载速度
 # 流水线仅失败在测试阶段时，可临时验证：docker build --build-arg SKIP_TESTS=true .
+# 若 CI 传入空字符串，${SKIP_TESTS} 会变成 -DskipTests= ，Maven 解析异常；未设置或空时回退为 false
 ARG SKIP_TESTS=false
-RUN mvn -B --no-transfer-progress -s /app/settings.xml -f /app/pom.xml clean package -DskipTests=${SKIP_TESTS}
+RUN mvn -B --no-transfer-progress -s /app/settings.xml -f /app/pom.xml clean package -DskipTests=${SKIP_TESTS:-false}
 
 # 选择运行时基础镜像
 FROM alpine:3.13

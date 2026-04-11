@@ -279,6 +279,15 @@ public class GameRoom {
         this.whiteUserId = whiteUserId;
     }
 
+    /** 残局好友房：下一手黑时由房主占位黑座换为好友，需与 DB 同步更新 */
+    public void setBlackUserId(long blackUserId) {
+        this.blackUserId = blackUserId;
+    }
+
+    public void setBlackToken(String blackToken) {
+        this.blackToken = blackToken;
+    }
+
     public boolean isWhiteIsBot() {
         return whiteIsBot;
     }
