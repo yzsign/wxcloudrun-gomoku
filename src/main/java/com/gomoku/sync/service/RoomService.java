@@ -6,6 +6,7 @@ import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
+import com.gomoku.sync.mapper.UserMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -21,17 +22,20 @@ public class RoomService {
     private final RoomParticipantMapper roomParticipantMapper;
     private final RoomGameStateService roomGameStateService;
     private final ObjectMapper objectMapper;
+    private final UserMapper userMapper;
     private final Map<String, GameRoom> rooms = new ConcurrentHashMap<>();
 
     public RoomService(
             @Value("${gomoku.board-size:15}") int boardSize,
             RoomParticipantMapper roomParticipantMapper,
             RoomGameStateService roomGameStateService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            UserMapper userMapper) {
         this.boardSize = boardSize;
         this.roomParticipantMapper = roomParticipantMapper;
         this.roomGameStateService = roomGameStateService;
         this.objectMapper = objectMapper;
+        this.userMapper = userMapper;
     }
 
     public int getBoardSize() {
@@ -180,9 +184,9 @@ public class RoomService {
     }
 
     /**
-     * 加入房间，生成白方 token；若房间不存在或已有白方则失败
+     * 加入房间：普通房入座白方；残局好友房按棋谱「下一手」分配——下一手黑则好友执黑、人机执白，下一手白则好友执白、人机执黑。
      */
-    public JoinResult joinRoom(String roomId, long whiteUserId) {
+    public JoinResult joinRoom(String roomId, long guestUserId) {
         GameRoom room = getRoom(roomId);
         if (room == null) {
             return JoinResult.notFound();
@@ -191,40 +195,82 @@ public class RoomService {
             if (room.hasGuest()) {
                 return JoinResult.full();
             }
-            if (room.getBlackUserId() == whiteUserId) {
+            if (room.getBlackUserId() == guestUserId) {
                 return JoinResult.sameUser();
             }
+            boolean puzzle =
+                    room.isPuzzleRoom()
+                            && room.hasPuzzleTemplate()
+                            && room.getPuzzleTemplateSideToMove() != null;
+            int stm =
+                    puzzle ? room.getPuzzleTemplateSideToMove() : Stone.BLACK;
+
+            if (puzzle && stm == Stone.BLACK) {
+                Long botId = userMapper.selectRandomBotId();
+                if (botId == null) {
+                    return JoinResult.noBots();
+                }
+                long observerId = room.getObserverUserId();
+                if (room.getBlackUserId() != observerId) {
+                    return JoinResult.notFound();
+                }
+                String blackTok = UUID.randomUUID().toString();
+                String whiteTok = UUID.randomUUID().toString();
+                if (roomParticipantMapper.updatePuzzleJoinFriendAsBlack(
+                                roomId,
+                                observerId,
+                                guestUserId,
+                                blackTok,
+                                botId,
+                                whiteTok)
+                        != 1) {
+                    return JoinResult.notFound();
+                }
+                room.setBlackUserId(guestUserId);
+                room.setBlackToken(blackTok);
+                room.setWhiteUserId(botId);
+                room.setWhiteToken(whiteTok);
+                room.restoreLiveStateFromPuzzleTemplate(false);
+                room.setWhiteIsBot(true);
+                room.setBlackIsBot(false);
+                applyPuzzleRoomBotMeta(room, roomId);
+                return JoinResult.ok(blackTok, Stone.BLACK);
+            }
+
             String whiteToken = UUID.randomUUID().toString();
             room.setWhiteToken(whiteToken);
-            room.setWhiteUserId(whiteUserId);
+            room.setWhiteUserId(guestUserId);
             room.setWhiteIsBot(false);
-            if (roomParticipantMapper.updateWhite(roomId, whiteUserId, whiteToken) != 1) {
+            if (roomParticipantMapper.updateWhite(roomId, guestUserId, whiteToken) != 1) {
                 room.setWhiteToken(null);
                 room.setWhiteUserId(null);
                 return JoinResult.notFound();
             }
-            if (room.isPuzzleRoom() && room.hasPuzzleTemplate()) {
+            if (puzzle && stm == Stone.WHITE) {
                 room.restoreLiveStateFromPuzzleTemplate(false);
-                /** 好友固定坐白方，人机始终为黑方（与下一手先后无关） */
                 room.setBlackIsBot(true);
                 room.setWhiteIsBot(false);
-                int dmin = 2;
-                int dmax = 3;
-                int styleOrd = BotAiStyle.randomOrdinal();
-                room.setBotSearchDepthRange(dmin, dmax);
-                room.setBotAiStyleOrdinal(styleOrd);
-                roomParticipantMapper.updatePuzzleRoomBots(
-                        roomId,
-                        room.isWhiteIsBot(),
-                        room.isBlackIsBot(),
-                        dmin,
-                        dmax,
-                        styleOrd);
-                if (!roomGameStateService.tryPersist(room)) {
-                    roomGameStateService.forceReloadFromDb(room);
-                }
+                applyPuzzleRoomBotMeta(room, roomId);
             }
-            return JoinResult.ok(whiteToken);
+            return JoinResult.ok(whiteToken, Stone.WHITE);
+        }
+    }
+
+    private void applyPuzzleRoomBotMeta(GameRoom room, String roomId) {
+        int dmin = 2;
+        int dmax = 3;
+        int styleOrd = BotAiStyle.randomOrdinal();
+        room.setBotSearchDepthRange(dmin, dmax);
+        room.setBotAiStyleOrdinal(styleOrd);
+        roomParticipantMapper.updatePuzzleRoomBots(
+                roomId,
+                room.isWhiteIsBot(),
+                room.isBlackIsBot(),
+                dmin,
+                dmax,
+                styleOrd);
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
         }
     }
 
@@ -280,37 +326,58 @@ public class RoomService {
 
     public static final class JoinResult {
         private final boolean ok;
-        private final String whiteToken;
+        /** 加入方 WebSocket token */
+        private final String guestToken;
+        /** {@link Stone#BLACK} 或 {@link Stone#WHITE} */
+        private final Integer guestColor;
         private final String error;
 
-        private JoinResult(boolean ok, String whiteToken, String error) {
+        private JoinResult(boolean ok, String guestToken, Integer guestColor, String error) {
             this.ok = ok;
-            this.whiteToken = whiteToken;
+            this.guestToken = guestToken;
+            this.guestColor = guestColor;
             this.error = error;
         }
 
-        public static JoinResult ok(String whiteToken) {
-            return new JoinResult(true, whiteToken, null);
+        public static JoinResult ok(String guestToken, int guestColor) {
+            return new JoinResult(true, guestToken, guestColor, null);
         }
 
         public static JoinResult notFound() {
-            return new JoinResult(false, null, "ROOM_NOT_FOUND");
+            return new JoinResult(false, null, null, "ROOM_NOT_FOUND");
         }
 
         public static JoinResult full() {
-            return new JoinResult(false, null, "ROOM_FULL");
+            return new JoinResult(false, null, null, "ROOM_FULL");
         }
 
         public static JoinResult sameUser() {
-            return new JoinResult(false, null, "SAME_USER");
+            return new JoinResult(false, null, null, "SAME_USER");
+        }
+
+        public static JoinResult noBots() {
+            return new JoinResult(false, null, null, "NO_BOTS");
         }
 
         public boolean isOk() {
             return ok;
         }
 
+        public String getGuestToken() {
+            return guestToken;
+        }
+
+        public Integer getGuestColor() {
+            return guestColor;
+        }
+
+        /** 兼容旧客户端：仅加入方为白时返回 token */
         public String getWhiteToken() {
-            return whiteToken;
+            return ok && guestColor != null && guestColor == Stone.WHITE ? guestToken : null;
+        }
+
+        public String getBlackToken() {
+            return ok && guestColor != null && guestColor == Stone.BLACK ? guestToken : null;
         }
 
         public String getError() {

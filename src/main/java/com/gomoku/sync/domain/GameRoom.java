@@ -1287,14 +1287,14 @@ public class GameRoom {
     }
 
     /**
-     * 真人白方首次连上 WS 时调用：将棋盘恢复为邀请时残局与下一手（清除房主等待期间可能的落子）。
+     * 真人好友（执黑或执白）首次连上对应座位 WS 时调用：将棋盘恢复为邀请时残局与下一手。
      *
      * @return 是否执行了重置
      */
     public boolean tryApplyPuzzleFriendJoinResetOnce() {
         lock.lock();
         try {
-            if (!puzzleRoom || whiteIsBot) {
+            if (!puzzleRoom) {
                 return false;
             }
             if (puzzleFriendBaselineBoard == null || puzzleFriendJoinResetDone) {

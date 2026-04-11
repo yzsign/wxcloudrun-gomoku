@@ -24,6 +24,17 @@ public interface RoomParticipantMapper {
             @Param("whiteUserId") long whiteUserId,
             @Param("whiteToken") String whiteToken);
 
+    /**
+     * 残局好友房：下一手为黑时好友入座黑方、白方为人机（原黑座为房主占位，须与 observer 一致）。
+     */
+    int updatePuzzleJoinFriendAsBlack(
+            @Param("roomId") String roomId,
+            @Param("priorBlackUserId") long priorBlackUserId,
+            @Param("friendUserId") long friendUserId,
+            @Param("blackToken") String blackToken,
+            @Param("whiteBotUserId") long whiteBotUserId,
+            @Param("whiteToken") String whiteToken);
+
     /** 双方已入座后更新黑/白用户与 token（如随机交换先后手） */
     int updateBothSides(
             @Param("roomId") String roomId,

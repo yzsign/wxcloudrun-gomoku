@@ -97,6 +97,10 @@ public class RoomController {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(new ApiError("ROOM_NOT_FOUND", "房间不存在"));
             }
+            if ("NO_BOTS".equals(jr.getError())) {
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(new ApiError("NO_BOTS", "暂无人机账号，请稍后重试"));
+            }
             if ("SAME_USER".equals(jr.getError())) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                         .body(new ApiError("SAME_USER", "不能使用与房主相同的账号加入"));
@@ -105,7 +109,8 @@ public class RoomController {
                     .body(new ApiError("ROOM_FULL", "房间已满"));
         }
         GameRoom room = roomService.getRoom(roomId);
-        return ResponseEntity.ok(new JoinRoomResponse(jr.getWhiteToken(), room.getSize()));
+        return ResponseEntity.ok(
+                new JoinRoomResponse(room.getSize(), jr.getGuestToken(), jr.getGuestColor()));
     }
 
     /**

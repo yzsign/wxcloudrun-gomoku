@@ -45,6 +45,18 @@
           AND white_user_id IS NULL
     </update>
 
+    <update id="updatePuzzleJoinFriendAsBlack">
+        UPDATE room_participants
+        SET black_user_id = #{friendUserId},
+            black_token = #{blackToken},
+            white_user_id = #{whiteBotUserId},
+            white_token = #{whiteToken}
+        WHERE room_id = #{roomId}
+          AND puzzle_room = 1
+          AND white_user_id IS NULL
+          AND black_user_id = #{priorBlackUserId}
+    </update>
+
     <update id="updateBothSides">
         UPDATE room_participants
         SET black_user_id = #{blackUserId},
