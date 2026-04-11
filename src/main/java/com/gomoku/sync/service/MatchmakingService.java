@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 
 /**
@@ -34,6 +35,21 @@ public class MatchmakingService {
 
     public RandomMatchResponse enter(long userId) {
         synchronized (lock) {
+            /*
+             * 幂等：房主重复 POST /match/random 时，若其等待房仍在队列中，直接返回同一房间，
+             * 避免下方 join 队首时 SAME_USER 误把该房移出队列导致永远无法匹配。
+             */
+            for (String rid : new ArrayList<>(waitingRoomIds)) {
+                GameRoom r = roomService.getRoom(rid);
+                if (r != null
+                        && !r.isPuzzleRoom()
+                        && r.getBlackUserId() == userId
+                        && !r.hasGuest()) {
+                    return new RandomMatchResponse(
+                            "host", r.getRoomId(), r.getBlackToken(), null, r.getSize(), null);
+                }
+            }
+            int sameUserSkips = 0;
             while (true) {
                 String roomId = waitingRoomIds.peekFirst();
                 if (roomId == null) {
@@ -41,6 +57,7 @@ public class MatchmakingService {
                 }
                 RoomService.JoinResult jr = roomService.joinRoom(roomId, userId);
                 if (jr.isOk()) {
+                    sameUserSkips = 0;
                     waitingRoomIds.pollFirst();
                     if (randomSwapSides) {
                         roomService.maybeSwapRandomSides(roomId);
@@ -59,11 +76,24 @@ public class MatchmakingService {
                             room.getSize(),
                             yourColor);
                 }
+                if ("SAME_USER".equals(jr.getError())) {
+                    /*
+                     * 队首为本人创建的等待房，不能作为 guest 入座；移至队尾供其他寻敌者匹配，
+                     * 不可 poll 丢弃，否则该房永久脱离匹配队列。
+                     */
+                    if (sameUserSkips >= waitingRoomIds.size()) {
+                        break;
+                    }
+                    sameUserSkips++;
+                    waitingRoomIds.addLast(waitingRoomIds.pollFirst());
+                    continue;
+                }
+                sameUserSkips = 0;
                 waitingRoomIds.pollFirst();
                 if ("ROOM_NOT_FOUND".equals(jr.getError())) {
                     roomService.removeRoomIfExists(roomId);
                 }
-                // ROOM_FULL / SAME_USER：移出队列，不删房间
+                // ROOM_FULL：移出队列，不删房间
             }
             GameRoom room = roomService.createRoom(userId);
             waitingRoomIds.addLast(room.getRoomId());
