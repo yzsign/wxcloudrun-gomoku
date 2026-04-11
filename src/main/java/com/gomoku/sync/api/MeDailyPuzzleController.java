@@ -71,7 +71,8 @@ public class MeDailyPuzzleController {
     }
 
     /**
-     * 创建残局好友房：返回 roomId 与旁观 token；好友通过 POST /api/rooms/join 加入执白。
+     * 创建残局好友房：返回 roomId、房主执黑 token、旁观 token；好友 POST /api/rooms/join 执白。
+     * 新房主应使用 blackToken 连 WebSocket；好友首次连上白方时服务端将棋盘重置为邀请时残局与下一手。
      */
     @PostMapping("/puzzle-friend-room")
     public ResponseEntity<?> createPuzzleFriendRoom(
@@ -88,7 +89,11 @@ public class MeDailyPuzzleController {
         try {
             GameRoom room = roomService.createPuzzleFriendRoom(uid.get(), body.getBoard(), body.getSideToMove());
             PuzzleFriendRoomResponse res =
-                    new PuzzleFriendRoomResponse(room.getRoomId(), room.getSpectatorToken(), room.getSize());
+                    new PuzzleFriendRoomResponse(
+                            room.getRoomId(),
+                            room.getBlackToken(),
+                            room.getSpectatorToken(),
+                            room.getSize());
             return ResponseEntity.status(HttpStatus.CREATED).body(res);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));

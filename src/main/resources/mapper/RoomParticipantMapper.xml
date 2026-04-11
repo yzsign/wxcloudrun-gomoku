@@ -30,7 +30,12 @@
 
     <update id="updateWhite">
         UPDATE room_participants
-        SET white_user_id = #{whiteUserId}, white_token = #{whiteToken}
+        SET white_user_id = #{whiteUserId},
+            white_token = #{whiteToken},
+            white_is_bot = 0,
+            bot_search_depth_min = NULL,
+            bot_search_depth_max = NULL,
+            bot_ai_style = NULL
         WHERE room_id = #{roomId}
           AND white_user_id IS NULL
     </update>

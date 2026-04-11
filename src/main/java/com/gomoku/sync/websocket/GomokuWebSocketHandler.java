@@ -168,6 +168,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         } else if (!room.isWhiteIsBot()) {
             room.setClusterWhiteConnected(true);
         }
+        if (color == Stone.WHITE && !room.isWhiteIsBot() && room.isPuzzleRoom()) {
+            room.tryApplyPuzzleFriendJoinResetOnce();
+        }
         roomGameStateService.tryPersist(room);
 
         roomSessionTracker.register(roomId);

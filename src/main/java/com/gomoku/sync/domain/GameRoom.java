@@ -87,6 +87,13 @@ public class GameRoom {
     private long observerUserId;
     private WebSocketSession spectatorSession;
 
+    /**
+     * 残局好友房：邀请时的盘面与下一手；好友首次入座白方时 {@link #tryApplyPuzzleFriendJoinResetOnce()} 恢复至此状态。
+     */
+    private int[][] puzzleFriendBaselineBoard;
+    private int puzzleFriendBaselineCurrent = Stone.BLACK;
+    private boolean puzzleFriendJoinResetDone;
+
     public GameRoom(String roomId, int size, String blackToken, long blackUserId) {
         this.roomId = roomId;
         this.size = size;
@@ -1148,5 +1155,77 @@ public class GameRoom {
 
     public void setSpectatorSession(WebSocketSession spectatorSession) {
         this.spectatorSession = spectatorSession;
+    }
+
+    /** 建局并 hydrate 后调用：保存邀请时的残局快照，供好友进房重置。 */
+    public void capturePuzzleFriendBaselineFromRoomState() {
+        lock.lock();
+        try {
+            if (!puzzleRoom) {
+                return;
+            }
+            puzzleFriendBaselineBoard = new int[size][size];
+            for (int i = 0; i < size; i++) {
+                System.arraycopy(board[i], 0, puzzleFriendBaselineBoard[i], 0, size);
+            }
+            puzzleFriendBaselineCurrent = current;
+            puzzleFriendJoinResetDone = false;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean hasPuzzleFriendBaseline() {
+        return puzzleFriendBaselineBoard != null;
+    }
+
+    /**
+     * 真人白方首次连上 WS 时调用：将棋盘恢复为邀请时残局与下一手（清除房主等待期间可能的落子）。
+     *
+     * @return 是否执行了重置
+     */
+    public boolean tryApplyPuzzleFriendJoinResetOnce() {
+        lock.lock();
+        try {
+            if (!puzzleRoom || whiteIsBot) {
+                return false;
+            }
+            if (puzzleFriendBaselineBoard == null || puzzleFriendJoinResetDone) {
+                return false;
+            }
+            for (int i = 0; i < size; i++) {
+                System.arraycopy(puzzleFriendBaselineBoard[i], 0, board[i], 0, size);
+            }
+            current = puzzleFriendBaselineCurrent;
+            gameOver = false;
+            winner = null;
+            gameEndReason = null;
+            moveHistory.clear();
+            pendingUndoRequesterColor = null;
+            pendingUndoPops = 0;
+            pendingDrawRequesterColor = null;
+            pendingRematchRequesterColor = null;
+            clockPauseStartedWallMs = 0L;
+            long now = System.currentTimeMillis();
+            clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
+            int stones = countOccupiedStones();
+            clockGameDeadlineWallMs = stones > 0 ? now + CLOCK_GAME_MS : 0L;
+            puzzleFriendJoinResetDone = true;
+            return true;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private int countOccupiedStones() {
+        int n = 0;
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                if (board[i][j] != Stone.EMPTY) {
+                    n++;
+                }
+            }
+        }
+        return n;
     }
 }

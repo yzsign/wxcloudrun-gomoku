@@ -71,6 +71,7 @@ public class RoomService {
                     roomId, creatorUserId, blackToken, creatorUserId, spectatorToken);
             roomGameStateService.insertPuzzleInitial(roomId, board, sideToMove);
             roomGameStateService.hydrateRoom(room);
+            room.capturePuzzleFriendBaselineFromRoomState();
         } catch (IllegalArgumentException e) {
             rooms.remove(roomId);
             throw e;
@@ -169,6 +170,7 @@ public class RoomService {
             String whiteToken = UUID.randomUUID().toString();
             room.setWhiteToken(whiteToken);
             room.setWhiteUserId(whiteUserId);
+            room.setWhiteIsBot(false);
             if (roomParticipantMapper.updateWhite(roomId, whiteUserId, whiteToken) != 1) {
                 room.setWhiteToken(null);
                 room.setWhiteUserId(null);
