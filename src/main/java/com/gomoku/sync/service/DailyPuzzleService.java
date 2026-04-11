@@ -7,10 +7,13 @@ import com.gomoku.sync.api.dto.DailyPuzzleSubmitResponse;
 import com.gomoku.sync.api.dto.DailyPuzzleTodayResponse;
 import com.gomoku.sync.domain.DailyPuzzle;
 import com.gomoku.sync.domain.DailyPuzzleReplay;
+import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserDailyPuzzle;
 import com.gomoku.sync.mapper.DailyPuzzleMapper;
 import com.gomoku.sync.mapper.DailyPuzzleScheduleMapper;
 import com.gomoku.sync.mapper.UserDailyPuzzleMapper;
+import com.gomoku.sync.mapper.UserMapper;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,21 +29,27 @@ public class DailyPuzzleService {
     public static final String SUBMIT_INVALID = "INVALID";
     public static final String SUBMIT_NOT_MET = "NOT_MET";
 
+    /** 每个自然日第一次通关当日残局时奖励团团积分（同日再次提交为 ALREADY_SOLVED，不再发放）；不调整天梯分 */
+    private static final int FIRST_SOLVE_ACTIVITY_POINTS = 20;
+
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
     private final DailyPuzzleMapper dailyPuzzleMapper;
     private final DailyPuzzleScheduleMapper dailyPuzzleScheduleMapper;
     private final UserDailyPuzzleMapper userDailyPuzzleMapper;
+    private final UserMapper userMapper;
     private final ObjectMapper objectMapper;
 
     public DailyPuzzleService(
             DailyPuzzleMapper dailyPuzzleMapper,
             DailyPuzzleScheduleMapper dailyPuzzleScheduleMapper,
             UserDailyPuzzleMapper userDailyPuzzleMapper,
+            UserMapper userMapper,
             ObjectMapper objectMapper) {
         this.dailyPuzzleMapper = dailyPuzzleMapper;
         this.dailyPuzzleScheduleMapper = dailyPuzzleScheduleMapper;
         this.userDailyPuzzleMapper = userDailyPuzzleMapper;
+        this.userMapper = userMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -112,20 +121,29 @@ public class DailyPuzzleService {
             throw new IllegalStateException("题目不可用");
         }
 
-        UserDailyPuzzle row = userDailyPuzzleMapper.selectByUserAndDate(userId, ymd);
+        UserDailyPuzzle row = userDailyPuzzleMapper.selectByUserAndDateForUpdate(userId, ymd);
         if (row == null) {
-            row = new UserDailyPuzzle();
-            row.setUserId(userId);
-            row.setPuzzleDate(ymd);
-            row.setPuzzleId(puzzleId);
-            row.setStatus(UserDailyPuzzle.STATUS_IN_PROGRESS);
-            row.setAttemptCount(0);
-            row.setHintUsed(false);
-            userDailyPuzzleMapper.insert(row);
+            UserDailyPuzzle ins = new UserDailyPuzzle();
+            ins.setUserId(userId);
+            ins.setPuzzleDate(ymd);
+            ins.setPuzzleId(puzzleId);
+            ins.setStatus(UserDailyPuzzle.STATUS_IN_PROGRESS);
+            ins.setAttemptCount(0);
+            ins.setHintUsed(false);
+            try {
+                userDailyPuzzleMapper.insert(ins);
+            } catch (DataIntegrityViolationException ignore) {
+                // 并发插入：另一方已写入
+            }
+            row = userDailyPuzzleMapper.selectByUserAndDateForUpdate(userId, ymd);
+        }
+        if (row == null) {
+            throw new IllegalStateException("创建每日残局记录失败");
         }
 
         if (UserDailyPuzzle.STATUS_SOLVED.equals(row.getStatus())) {
-            return new DailyPuzzleSubmitResponse(SUBMIT_ALREADY, true, true, row.getAttemptCount());
+            return new DailyPuzzleSubmitResponse(
+                    SUBMIT_ALREADY, true, true, row.getAttemptCount(), 0, null);
         }
 
         String movesJson;
@@ -151,18 +169,30 @@ public class DailyPuzzleService {
 
         if (r == DailyPuzzleReplay.Result.INVALID) {
             userDailyPuzzleMapper.updateAfterFailedAttempt(row);
-            return new DailyPuzzleSubmitResponse(SUBMIT_INVALID, false, false, nextAttempts);
+            return new DailyPuzzleSubmitResponse(SUBMIT_INVALID, false, false, nextAttempts, 0, null);
         }
         if (r == DailyPuzzleReplay.Result.NOT_MET) {
             userDailyPuzzleMapper.updateAfterFailedAttempt(row);
-            return new DailyPuzzleSubmitResponse(SUBMIT_NOT_MET, false, false, nextAttempts);
+            return new DailyPuzzleSubmitResponse(SUBMIT_NOT_MET, false, false, nextAttempts, 0, null);
         }
 
         row.setStatus(UserDailyPuzzle.STATUS_SOLVED);
         row.setBestMovesToWin(req.getMoves().size());
         row.setSolvedAt(new Date());
         userDailyPuzzleMapper.updateSolved(row);
-        return new DailyPuzzleSubmitResponse(SUBMIT_SOLVED, true, false, nextAttempts);
+
+        User user = userMapper.selectByIdForUpdate(userId);
+        int apDelta = 0;
+        Integer apAfter = null;
+        if (user != null) {
+            apDelta = FIRST_SOLVE_ACTIVITY_POINTS;
+            int nextAp = user.getActivityPoints() + apDelta;
+            user.setActivityPoints(nextAp);
+            userMapper.updateActivityPoints(user);
+            apAfter = nextAp;
+        }
+
+        return new DailyPuzzleSubmitResponse(SUBMIT_SOLVED, true, false, nextAttempts, apDelta, apAfter);
     }
 
     @Transactional

@@ -28,6 +28,14 @@
         LIMIT 1
     </select>
 
+    <select id="selectByUserAndDateForUpdate" resultMap="Row">
+        SELECT <include refid="Cols"/>
+        FROM user_daily_puzzle
+        WHERE user_id = #{userId} AND puzzle_date = #{puzzleDate}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
     <insert id="insert">
         INSERT INTO user_daily_puzzle (user_id, puzzle_date, puzzle_id, status, attempt_count, hint_used)
         VALUES (#{userId}, #{puzzleDate}, #{puzzleId}, #{status}, #{attemptCount}, #{hintUsed})
