@@ -22,7 +22,7 @@
         SELECT id, room_id, match_round, black_user_id, white_user_id, total_steps, outcome, runaway_user_id,
                black_elo_before, white_elo_before, black_elo_after, white_elo_after,
                black_elo_delta, white_elo_delta, moves_json,
-               black_piece_skin_id, white_piece_skin_id
+               black_piece_skin_id, white_piece_skin_id, created_at AS createdAt
         FROM games
         WHERE room_id = #{roomId} AND match_round = #{matchRound}
     </select>
@@ -31,9 +31,22 @@
         SELECT id, room_id, match_round, black_user_id, white_user_id, total_steps, outcome, runaway_user_id,
                black_elo_before, white_elo_before, black_elo_after, white_elo_after,
                black_elo_delta, white_elo_delta, moves_json,
-               black_piece_skin_id, white_piece_skin_id
+               black_piece_skin_id, white_piece_skin_id, created_at AS createdAt
         FROM games
         WHERE id = #{id}
+    </select>
+
+    <select id="countUserWinsInCreatedRangeBeforeId" resultType="int">
+        SELECT COUNT(*) FROM games g
+        WHERE (
+            (g.black_user_id = #{userId} AND g.outcome = 'BLACK_WIN')
+            OR (g.white_user_id = #{userId} AND g.outcome = 'WHITE_WIN')
+        )
+          AND g.created_at &gt;= #{startInclusive}
+          AND g.created_at &lt; #{endExclusive}
+        <if test="beforeIdExclusive != null">
+          AND g.id &lt; #{beforeIdExclusive}
+        </if>
     </select>
 
     <!--

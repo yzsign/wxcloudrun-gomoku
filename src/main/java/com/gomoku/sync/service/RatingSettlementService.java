@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
@@ -32,6 +33,8 @@ public class RatingSettlementService {
 
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final int MAX_STEPS = 256;
+    /** 与每日残局首次通关 {@link DailyPuzzleService} 一致：残局好友房受邀好友当日首胜时发放 */
+    private static final int PUZZLE_FRIEND_FIRST_DAILY_WIN_AP = 20;
 
     private final RoomParticipantMapper roomParticipantMapper;
     private final GameMapper gameMapper;
@@ -100,18 +103,43 @@ public class RatingSettlementService {
             int bApAfter = eb != null ? eb.getActivityPoints() : 0;
             int wApAfter = ew != null ? ew.getActivityPoints() : 0;
             boolean ran = existingGame.getRunawayUserId() != null;
+            RoomParticipant rpExisting = roomParticipantMapper.selectByRoomId(req.getRoomId());
+            boolean puzzleExisting = rpExisting != null && rpExisting.isPuzzleRoom();
+            LocalDate existingDay =
+                    existingGame.getCreatedAt() != null
+                            ? existingGame
+                                    .getCreatedAt()
+                                    .toInstant()
+                                    .atZone(SHANGHAI)
+                                    .toLocalDate()
+                            : LocalDate.now(SHANGHAI);
+            Long existingGid = existingGame.getId();
+            int[] pfExisting =
+                    computePuzzleFriendFirstDailyWinApDeltas(
+                            rpExisting,
+                            existingGame.getOutcome(),
+                            existingGame.getTotalSteps(),
+                            ran,
+                            existingGame.getBlackUserId(),
+                            existingGame.getWhiteUserId(),
+                            existingGid,
+                            existingDay);
             int bApDelta =
-                    activityPointsDeltaForSide(
-                            true,
-                            existingGame.getOutcome(),
-                            existingGame.getTotalSteps(),
-                            ran);
+                    puzzleExisting
+                            ? pfExisting[0]
+                            : activityPointsDeltaForSide(
+                                    true,
+                                    existingGame.getOutcome(),
+                                    existingGame.getTotalSteps(),
+                                    ran);
             int wApDelta =
-                    activityPointsDeltaForSide(
-                            false,
-                            existingGame.getOutcome(),
-                            existingGame.getTotalSteps(),
-                            ran);
+                    puzzleExisting
+                            ? pfExisting[1]
+                            : activityPointsDeltaForSide(
+                                    false,
+                                    existingGame.getOutcome(),
+                                    existingGame.getTotalSteps(),
+                                    ran);
             return new SettleGameResponse(
                     existingId,
                     existingGame.getBlackEloAfter(),
@@ -236,7 +264,26 @@ public class RatingSettlementService {
         int blackDeltaAct = blackEloAfter - blackEloBefore;
         int whiteDeltaAct = whiteEloAfter - whiteEloBefore;
 
-        applyStatsAfterGame(black, white, outcome, runaway, runawayUid, steps);
+        int[] pfNew =
+                computePuzzleFriendFirstDailyWinApDeltas(
+                        rp,
+                        outcome,
+                        steps,
+                        runaway,
+                        blackId,
+                        whiteId,
+                        null,
+                        today);
+        applyStatsAfterGame(
+                black,
+                white,
+                outcome,
+                runaway,
+                runawayUid,
+                steps,
+                rp.isPuzzleRoom(),
+                pfNew[0],
+                pfNew[1]);
 
         userMapper.updateRatingProfile(black);
         userMapper.updateRatingProfile(white);
@@ -264,12 +311,15 @@ public class RatingSettlementService {
         insertLog(blackId, whiteId, req.getRoomId(), blackEloBefore, blackEloAfter, blackDeltaAct, steps, runaway && Objects.equals(runawayUid, blackId));
         insertLog(whiteId, blackId, req.getRoomId(), whiteEloBefore, whiteEloAfter, whiteDeltaAct, steps, runaway && Objects.equals(runawayUid, whiteId));
 
+        boolean puzzleRoom = rp.isPuzzleRoom();
         int bApDelta =
-                activityPointsDeltaForSide(
-                        true, outcome, steps, runaway);
+                puzzleRoom
+                        ? pfNew[0]
+                        : activityPointsDeltaForSide(true, outcome, steps, runaway);
         int wApDelta =
-                activityPointsDeltaForSide(
-                        false, outcome, steps, runaway);
+                puzzleRoom
+                        ? pfNew[1]
+                        : activityPointsDeltaForSide(false, outcome, steps, runaway);
         return new SettleGameResponse(
                 gameId,
                 blackEloAfter,
@@ -344,7 +394,10 @@ public class RatingSettlementService {
             String outcome,
             boolean runaway,
             Long runawayUid,
-            int steps) {
+            int steps,
+            boolean puzzleRoom,
+            int puzzleFriendExtraBlack,
+            int puzzleFriendExtraWhite) {
 
         black.setTotalGames(black.getTotalGames() + 1);
         white.setTotalGames(white.getTotalGames() + 1);
@@ -386,8 +439,14 @@ public class RatingSettlementService {
             white.setPlacementFairGames(white.getPlacementFairGames() + 1);
         }
 
-        int bAp = activityPointsDeltaForSide(true, outcome, steps, runaway);
-        int wAp = activityPointsDeltaForSide(false, outcome, steps, runaway);
+        int bAp =
+                puzzleRoom
+                        ? puzzleFriendExtraBlack
+                        : activityPointsDeltaForSide(true, outcome, steps, runaway);
+        int wAp =
+                puzzleRoom
+                        ? puzzleFriendExtraWhite
+                        : activityPointsDeltaForSide(false, outcome, steps, runaway);
         if (bAp > 0) {
             black.setActivityPoints(black.getActivityPoints() + bAp);
         }
@@ -397,6 +456,73 @@ public class RatingSettlementService {
 
         refreshLowTrust(black);
         refreshLowTrust(white);
+    }
+
+    /**
+     * 残局好友房：受邀好友（非房主）获胜且为当日首场胜局时，胜方 +20 团团积分（与每日残局首次通关一致）。
+     *
+     * @param beforeGameIdExclusive 已存在对局重放时仅统计 id 小于该值的行；新结算传 null
+     */
+    private int[] computePuzzleFriendFirstDailyWinApDeltas(
+            RoomParticipant rp,
+            String outcome,
+            int steps,
+            boolean runaway,
+            long blackId,
+            long whiteId,
+            Long beforeGameIdExclusive,
+            LocalDate calendarDay) {
+        int[] out = new int[] {0, 0};
+        if (rp == null || !rp.isPuzzleRoom() || rp.getObserverUserId() == null) {
+            return out;
+        }
+        Long friendId = puzzleFriendInviteeUserId(rp);
+        if (friendId == null) {
+            return out;
+        }
+        if (runaway || steps < 15 || OUTCOME_DRAW.equals(outcome)) {
+            return out;
+        }
+        long winnerId =
+                OUTCOME_BLACK_WIN.equals(outcome)
+                        ? blackId
+                        : (OUTCOME_WHITE_WIN.equals(outcome) ? whiteId : -1L);
+        if (winnerId < 0 || winnerId != friendId) {
+            return out;
+        }
+        LocalDate day = calendarDay != null ? calendarDay : LocalDate.now(SHANGHAI);
+        Date start = Date.from(day.atStartOfDay(SHANGHAI).toInstant());
+        Date end = Date.from(day.plusDays(1).atStartOfDay(SHANGHAI).toInstant());
+        int prior =
+                gameMapper.countUserWinsInCreatedRangeBeforeId(
+                        friendId, start, end, beforeGameIdExclusive);
+        if (prior > 0) {
+            return out;
+        }
+        if (friendId == blackId) {
+            out[0] = PUZZLE_FRIEND_FIRST_DAILY_WIN_AP;
+        } else {
+            out[1] = PUZZLE_FRIEND_FIRST_DAILY_WIN_AP;
+        }
+        return out;
+    }
+
+    /**
+     * 残局好友房受邀者：与房主（observer）不同座、且该座非人机的一方。
+     */
+    private static Long puzzleFriendInviteeUserId(RoomParticipant rp) {
+        if (rp == null || !rp.isPuzzleRoom() || rp.getObserverUserId() == null) {
+            return null;
+        }
+        long obs = rp.getObserverUserId();
+        if (!rp.isBlackIsBot() && rp.getBlackUserId() != obs) {
+            return rp.getBlackUserId();
+        }
+        Long w = rp.getWhiteUserId();
+        if (w != null && !rp.isWhiteIsBot() && !Objects.equals(w, obs)) {
+            return w;
+        }
+        return null;
     }
 
     private static void refreshLowTrust(User u) {

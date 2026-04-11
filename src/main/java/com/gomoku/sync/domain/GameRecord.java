@@ -1,5 +1,7 @@
 package com.gomoku.sync.domain;
 
+import java.util.Date;
+
 /**
  * 对局归档 games 表
  */
@@ -25,6 +27,7 @@ public class GameRecord {
     private String blackPieceSkinId;
     /** 终局时白方佩戴棋子皮肤 */
     private String whitePieceSkinId;
+    private Date createdAt;
 
     public Long getId() {
         return id;
@@ -160,5 +163,13 @@ public class GameRecord {
 
     public void setWhitePieceSkinId(String whitePieceSkinId) {
         this.whitePieceSkinId = whitePieceSkinId;
+    }
+
+    public Date getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(Date createdAt) {
+        this.createdAt = createdAt;
     }
 }
