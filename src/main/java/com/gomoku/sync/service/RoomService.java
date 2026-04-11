@@ -257,8 +257,8 @@ public class RoomService {
     }
 
     private void applyPuzzleRoomBotMeta(GameRoom room, String roomId) {
-        int dmin = 2;
-        int dmax = 3;
+        int dmin = 3;
+        int dmax = 4;
         int styleOrd = BotAiStyle.randomOrdinal();
         room.setBotSearchDepthRange(dmin, dmax);
         room.setBotAiStyleOrdinal(styleOrd);

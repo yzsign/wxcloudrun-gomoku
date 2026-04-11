@@ -16,7 +16,7 @@ public final class GomokuAiEngine {
 
     private static final int[][] DIRS = {{0, 1}, {1, 0}, {1, 1}, {1, -1}};
     /** 未指定 DB 深度时的默认 minimax 层数（叶为 0） */
-    private static final int DEFAULT_SEARCH_DEPTH = 3;
+    private static final int DEFAULT_SEARCH_DEPTH = 4;
     /** 人机深度全局上限，防止 DB 误配极大值 */
     private static final int ABS_MAX_BOT_SEARCH_DEPTH = 8;
     /** 根节点候选上限 */
@@ -24,9 +24,16 @@ public final class GomokuAiEngine {
     /** 更深层的候选上限（减少分支因子） */
     private static final int MAX_CANDIDATES_DEEP = 12;
     /** 单步思考时间上限（纳秒），超时则叶节点提前返回局面分 */
-    private static final long MOVE_TIME_BUDGET_NANOS = 45_000_000L;
+    private static final long MOVE_TIME_BUDGET_NANOS = 70_000_000L;
     /** 实际搜索深度上限（与 DB 取 min） */
-    private static final int EFFECTIVE_DEPTH_CAP = 5;
+    private static final int EFFECTIVE_DEPTH_CAP = 6;
+    /**
+     * 对手线型威胁在评估中加权：强化对活二、活三、活四（及冲四等）的防守倾向，与
+     * {@link #ORDER_OPP_BLOCK_WEIGHT} 候选排序配合。
+     */
+    private static final double OPP_LINE_PATTERN_MULT = 1.18;
+    /** 候选排序：同点对方假想棋型分权重（与 gomoku.js sortMovesByHeuristic 一致） */
+    private static final double ORDER_OPP_BLOCK_WEIGHT = 1.55;
 
     private static final ThreadLocal<Long> DEADLINE_NANOS = new ThreadLocal<>();
     private static final ThreadLocal<BotAiStyle> AI_STYLE = new ThreadLocal<>();
@@ -188,9 +195,13 @@ public final class GomokuAiEngine {
         double wo = st.getOrderOppW();
         cands.sort(
                 Comparator.comparingDouble(
-                        (int[] m) ->
-                                -(wm * scorePoint(board, size, m[0], m[1], aiColor)
-                                        + wo * scorePoint(board, size, m[0], m[1], opp))));
+                        (int[] m) -> {
+                            int r = m[0];
+                            int c = m[1];
+                            double h = heuristicMoveScore(board, size, r, c, aiColor);
+                            double h2 = heuristicMoveScore(board, size, r, c, opp);
+                            return -(wm * h + wo * (h2 * ORDER_OPP_BLOCK_WEIGHT));
+                        }));
     }
 
     private static int maxCandForDepth(int depthRemaining) {
@@ -311,37 +322,57 @@ public final class GomokuAiEngine {
     }
 
     /**
-     * 只遍历四个方向上「合法五连起点」的窗口，等价于原全棋盘逐格评估但调用量更少。
+     * 沿横/竖/斜每条线扫描连续棋块，区分两端是否为空（活二/活三/活四等），再累计形势分；
+     * 比原「五格窗口」更能反映防守压力。
      */
     private static int evaluateBoard(int[][] board, int size, int aiColor, BotAiStyle st) {
-        int opp = opposite(aiColor);
         double em = st.getEvalMyW();
         double eo = st.getEvalOppW();
         double s = 0;
+        int[] line = new int[size];
         int r;
         int c;
         for (r = 0; r < size; r++) {
-            for (c = 0; c <= size - 5; c++) {
-                s += em * lineScore(board, size, r, c, 0, 1, aiColor);
-                s -= eo * lineScore(board, size, r, c, 0, 1, opp);
+            for (c = 0; c < size; c++) {
+                line[c] = board[r][c];
             }
+            s += evaluateLineArray(line, size, aiColor, em, eo);
         }
         for (c = 0; c < size; c++) {
-            for (r = 0; r <= size - 5; r++) {
-                s += em * lineScore(board, size, r, c, 1, 0, aiColor);
-                s -= eo * lineScore(board, size, r, c, 1, 0, opp);
+            for (r = 0; r < size; r++) {
+                line[r] = board[r][c];
+            }
+            s += evaluateLineArray(line, size, aiColor, em, eo);
+        }
+        for (int d = -(size - 1); d <= size - 1; d++) {
+            int count = 0;
+            if (d >= 0) {
+                r = d;
+                c = 0;
+            } else {
+                r = 0;
+                c = -d;
+            }
+            while (r < size && c < size) {
+                line[count++] = board[r][c];
+                r++;
+                c++;
+            }
+            if (count > 0) {
+                s += evaluateLineArray(line, count, aiColor, em, eo);
             }
         }
-        for (r = 0; r <= size - 5; r++) {
-            for (c = 0; c <= size - 5; c++) {
-                s += em * lineScore(board, size, r, c, 1, 1, aiColor);
-                s -= eo * lineScore(board, size, r, c, 1, 1, opp);
+        for (int sumIdx = 0; sumIdx <= 2 * (size - 1); sumIdx++) {
+            r = Math.max(0, sumIdx - (size - 1));
+            c = sumIdx - r;
+            int count = 0;
+            while (r < size && c >= 0) {
+                line[count++] = board[r][c];
+                r++;
+                c--;
             }
-        }
-        for (r = 0; r <= size - 5; r++) {
-            for (c = 4; c < size; c++) {
-                s += em * lineScore(board, size, r, c, 1, -1, aiColor);
-                s -= eo * lineScore(board, size, r, c, 1, -1, opp);
+            if (count > 0) {
+                s += evaluateLineArray(line, count, aiColor, em, eo);
             }
         }
         if (s > Integer.MAX_VALUE) {
@@ -353,62 +384,120 @@ public final class GomokuAiEngine {
         return (int) Math.round(s);
     }
 
-    private static int lineScore(int[][] board, int size, int r, int c, int dr, int dc, int color) {
-        int[] cells = new int[5];
-        for (int k = 0; k < 5; k++) {
-            int rr = r + dr * k;
-            int cc = c + dc * k;
-            if (rr < 0 || rr >= size || cc < 0 || cc >= size) {
-                return 0;
+    private static double evaluateLineArray(
+            int[] line, int len, int aiColor, double em, double eo) {
+        int opp = opposite(aiColor);
+        double sum = 0;
+        int i = 0;
+        while (i < len) {
+            if (line[i] == Stone.EMPTY) {
+                i++;
+                continue;
             }
-            cells[k] = board[rr][cc];
-        }
-        int my = 0;
-        int op = 0;
-        int em = 0;
-        int oc = opposite(color);
-        for (int v : cells) {
-            if (v == color) {
-                my++;
-            } else if (v == oc) {
-                op++;
-            } else {
-                em++;
+            int stone = line[i];
+            int j = i;
+            while (j < len && line[j] == stone) {
+                j++;
             }
+            int runLen = j - i;
+            boolean leftOpen = (i > 0 && line[i - 1] == Stone.EMPTY);
+            boolean rightOpen = (j < len && line[j] == Stone.EMPTY);
+            int mag = patternMagnitude(runLen, leftOpen, rightOpen);
+            if (stone == aiColor) {
+                sum += em * mag;
+            } else if (stone == opp) {
+                sum -= eo * OPP_LINE_PATTERN_MULT * mag;
+            }
+            i = j;
         }
-        if (op > 0 && my > 0) {
-            return 0;
+        return sum;
+    }
+
+    /**
+     * 与 gomoku.js linePatternScore 一致：连子长度与两端是否为空决定活二/活三/活四等权重。
+     */
+    private static int patternMagnitude(int len, boolean leftOpen, boolean rightOpen) {
+        int openEnds = (leftOpen ? 1 : 0) + (rightOpen ? 1 : 0);
+        if (len >= 5) {
+            return 10_000_000;
         }
-        if (my == 5) {
-            return 2600000;
+        if (len == 4) {
+            if (openEnds == 2) {
+                return 500_000;
+            }
+            if (openEnds == 1) {
+                return 120_000;
+            }
+            return 8_000;
         }
-        if (my == 4 && em == 1) {
-            return 210000;
+        if (len == 3) {
+            if (openEnds == 2) {
+                return 45_000;
+            }
+            if (openEnds == 1) {
+                return 6_000;
+            }
+            return 400;
         }
-        if (my == 3 && em == 2) {
-            return 10000;
+        if (len == 2) {
+            if (openEnds == 2) {
+                return 2_200;
+            }
+            if (openEnds == 1) {
+                return 350;
+            }
+            return 40;
         }
-        if (my == 2 && em == 3) {
-            return 480;
-        }
-        if (my == 1 && em == 4) {
-            return 48;
+        if (len == 1) {
+            if (openEnds == 2) {
+                return 120;
+            }
+            if (openEnds == 1) {
+                return 25;
+            }
+            return 3;
         }
         return 0;
     }
 
-    private static int scorePoint(int[][] board, int size, int r, int c, int color) {
+    /** 假设在空位落子后的四向棋型分之和（用于候选排序） */
+    private static int heuristicMoveScore(int[][] board, int size, int r, int c, int color) {
+        if (r < 0 || r >= size || c < 0 || c >= size || board[r][c] != Stone.EMPTY) {
+            return 0;
+        }
+        board[r][c] = color;
         int sum = 0;
         for (int[] dir : DIRS) {
-            for (int k = 0; k < 5; k++) {
-                int sr = r - dir[0] * k;
-                int sc = c - dir[1] * k;
-                if (sr >= 0 && sr < size && sc >= 0 && sc < size) {
-                    sum += lineScore(board, size, sr, sc, dir[0], dir[1], color);
-                }
-            }
+            sum += linePatternScoreFromStone(board, size, r, c, dir[0], dir[1], color);
         }
+        board[r][c] = Stone.EMPTY;
         return sum;
+    }
+
+    private static int linePatternScoreFromStone(
+            int[][] board, int size, int r, int c, int dr, int dc, int color) {
+        int len = 1;
+        int nr = r - dr;
+        int nc = c - dc;
+        while (nr >= 0 && nr < size && nc >= 0 && nc < size && board[nr][nc] == color) {
+            len++;
+            nr -= dr;
+            nc -= dc;
+        }
+        int leftEnd =
+                (nr >= 0 && nr < size && nc >= 0 && nc < size) ? board[nr][nc] : -1;
+        nr = r + dr;
+        nc = c + dc;
+        while (nr >= 0 && nr < size && nc >= 0 && nc < size && board[nr][nc] == color) {
+            len++;
+            nr += dr;
+            nc += dc;
+        }
+        int rightEnd =
+                (nr >= 0 && nr < size && nc >= 0 && nc < size) ? board[nr][nc] : -1;
+        boolean leftOpen = (leftEnd == Stone.EMPTY);
+        boolean rightOpen = (rightEnd == Stone.EMPTY);
+        return patternMagnitude(len, leftOpen, rightOpen);
     }
 
     private static int[] findWinningMove(int[][] board, int size, int color) {
