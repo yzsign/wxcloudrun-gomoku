@@ -13,11 +13,19 @@
         <result property="botSearchDepthMin" column="bot_search_depth_min"/>
         <result property="botSearchDepthMax" column="bot_search_depth_max"/>
         <result property="botAiStyle" column="bot_ai_style"/>
+        <result property="observerUserId" column="observer_user_id"/>
+        <result property="observerToken" column="observer_token"/>
+        <result property="puzzleRoom" column="puzzle_room"/>
     </resultMap>
 
     <insert id="insertBlack">
         INSERT INTO room_participants (room_id, black_user_id, black_token)
         VALUES (#{roomId}, #{blackUserId}, #{blackToken})
+    </insert>
+
+    <insert id="insertPuzzleBlack">
+        INSERT INTO room_participants (room_id, black_user_id, black_token, observer_user_id, observer_token, puzzle_room)
+        VALUES (#{roomId}, #{blackUserId}, #{blackToken}, #{observerUserId}, #{observerToken}, 1)
     </insert>
 
     <update id="updateWhite">
@@ -47,7 +55,8 @@
 
     <select id="selectByRoomId" resultMap="RoomParticipantResult">
         SELECT room_id, black_user_id, black_token, white_user_id, white_token,
-               white_is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style
+               white_is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style,
+               observer_user_id, observer_token, puzzle_room
         FROM room_participants
         WHERE room_id = #{roomId}
         LIMIT 1

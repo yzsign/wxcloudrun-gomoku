@@ -10,6 +10,13 @@ public interface RoomParticipantMapper {
             @Param("blackUserId") long blackUserId,
             @Param("blackToken") String blackToken);
 
+    int insertPuzzleBlack(
+            @Param("roomId") String roomId,
+            @Param("blackUserId") long blackUserId,
+            @Param("blackToken") String blackToken,
+            @Param("observerUserId") long observerUserId,
+            @Param("observerToken") String observerToken);
+
     int updateWhite(
             @Param("roomId") String roomId,
             @Param("whiteUserId") long whiteUserId,

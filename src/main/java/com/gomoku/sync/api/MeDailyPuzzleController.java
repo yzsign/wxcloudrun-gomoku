@@ -5,7 +5,11 @@ import com.gomoku.sync.api.dto.DailyPuzzleHintResponse;
 import com.gomoku.sync.api.dto.DailyPuzzleSubmitRequest;
 import com.gomoku.sync.api.dto.DailyPuzzleSubmitResponse;
 import com.gomoku.sync.api.dto.DailyPuzzleTodayResponse;
+import com.gomoku.sync.api.dto.PuzzleFriendRoomRequest;
+import com.gomoku.sync.api.dto.PuzzleFriendRoomResponse;
+import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.service.DailyPuzzleService;
+import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +28,15 @@ public class MeDailyPuzzleController {
 
     private final DailyPuzzleService dailyPuzzleService;
     private final SessionJwtService sessionJwtService;
+    private final RoomService roomService;
 
-    public MeDailyPuzzleController(DailyPuzzleService dailyPuzzleService, SessionJwtService sessionJwtService) {
+    public MeDailyPuzzleController(
+            DailyPuzzleService dailyPuzzleService,
+            SessionJwtService sessionJwtService,
+            RoomService roomService) {
         this.dailyPuzzleService = dailyPuzzleService;
         this.sessionJwtService = sessionJwtService;
+        this.roomService = roomService;
     }
 
     @GetMapping("/daily-puzzle/today")
@@ -53,6 +62,34 @@ public class MeDailyPuzzleController {
         try {
             DailyPuzzleSubmitResponse res = dailyPuzzleService.submit(uid.get(), body);
             return ResponseEntity.ok(res);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(new ApiError("UNAVAILABLE", e.getMessage()));
+        }
+    }
+
+    /**
+     * 创建残局好友房：返回 roomId 与旁观 token；好友通过 POST /api/rooms/join 加入执白。
+     */
+    @PostMapping("/puzzle-friend-room")
+    public ResponseEntity<?> createPuzzleFriendRoom(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody PuzzleFriendRoomRequest body) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        if (body == null || body.getBoard() == null) {
+            return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", "缺少 board"));
+        }
+        try {
+            GameRoom room = roomService.createPuzzleFriendRoom(uid.get(), body.getBoard(), body.getSideToMove());
+            PuzzleFriendRoomResponse res =
+                    new PuzzleFriendRoomResponse(room.getRoomId(), room.getSpectatorToken(), room.getSize());
+            return ResponseEntity.status(HttpStatus.CREATED).body(res);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
         } catch (IllegalStateException e) {

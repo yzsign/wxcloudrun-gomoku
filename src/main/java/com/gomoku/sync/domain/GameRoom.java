@@ -81,6 +81,12 @@ public class GameRoom {
 
     private volatile boolean clusterWhiteConnected;
 
+    /** 残局好友房：房主用 observerToken 旁观；黑方行棋若无人连黑座则顺延读秒 */
+    private boolean puzzleRoom;
+    private String spectatorToken;
+    private long observerUserId;
+    private WebSocketSession spectatorSession;
+
     public GameRoom(String roomId, int size, String blackToken, long blackUserId) {
         this.roomId = roomId;
         this.size = size;
@@ -161,6 +167,19 @@ public class GameRoom {
                 return true;
             }
             if (clockMoveDeadlineWallMs > 0L && now >= clockMoveDeadlineWallMs) {
+                if (puzzleRoom) {
+                    boolean blackMissing =
+                            current == Stone.BLACK
+                                    && (blackSession == null || !blackSession.isOpen());
+                    boolean whiteMissing =
+                            current == Stone.WHITE
+                                    && !whiteIsBot
+                                    && (whiteSession == null || !whiteSession.isOpen());
+                    if (blackMissing || whiteMissing) {
+                        clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
+                        return false;
+                    }
+                }
                 gameOver = true;
                 winner = oppositeColor(current);
                 gameEndReason = END_REASON_MOVE_TIMEOUT;
@@ -1097,5 +1116,37 @@ public class GameRoom {
 
     public ReentrantLock getLock() {
         return lock;
+    }
+
+    public boolean isPuzzleRoom() {
+        return puzzleRoom;
+    }
+
+    public void setPuzzleRoom(boolean puzzleRoom) {
+        this.puzzleRoom = puzzleRoom;
+    }
+
+    public String getSpectatorToken() {
+        return spectatorToken;
+    }
+
+    public void setSpectatorToken(String spectatorToken) {
+        this.spectatorToken = spectatorToken;
+    }
+
+    public long getObserverUserId() {
+        return observerUserId;
+    }
+
+    public void setObserverUserId(long observerUserId) {
+        this.observerUserId = observerUserId;
+    }
+
+    public WebSocketSession getSpectatorSession() {
+        return spectatorSession;
+    }
+
+    public void setSpectatorSession(WebSocketSession spectatorSession) {
+        this.spectatorSession = spectatorSession;
     }
 }

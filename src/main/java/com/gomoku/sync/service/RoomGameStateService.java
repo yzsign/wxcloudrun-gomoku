@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.GameRoomStateSnapshot;
 import com.gomoku.sync.domain.RoomGameStateRow;
+import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.mapper.RoomGameStateMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -41,6 +43,63 @@ public class RoomGameStateService {
         } catch (Exception e) {
             throw new IllegalStateException("写入 room_game_state 失败", e);
         }
+    }
+
+    /**
+     * 残局好友房：写入给定盘面与行棋方（房主旁观，黑座可无 WS）。
+     */
+    public void insertPuzzleInitial(String roomId, int[][] board, int sideToMove) {
+        DailyPuzzleAdminService.validateBoardCells(board, boardSize);
+        if (sideToMove != Stone.BLACK && sideToMove != Stone.WHITE) {
+            throw new IllegalArgumentException("sideToMove 须为 1（黑）或 2（白）");
+        }
+        try {
+            GameRoomStateSnapshot snap = new GameRoomStateSnapshot();
+            snap.setBoardSize(boardSize);
+            int[][] b = new int[boardSize][boardSize];
+            for (int i = 0; i < boardSize; i++) {
+                System.arraycopy(board[i], 0, b[i], 0, boardSize);
+            }
+            snap.setBoard(b);
+            snap.setCurrent(sideToMove);
+            snap.setGameOver(false);
+            snap.setWinner(null);
+            snap.setMatchRound(1);
+            snap.setMoves(new ArrayList<>());
+            snap.setPendingUndoRequesterColor(null);
+            snap.setPendingUndoPops(0);
+            snap.setPendingRematchRequesterColor(null);
+            snap.setPendingDrawRequesterColor(null);
+            snap.setClusterBlackConnected(false);
+            snap.setClusterWhiteConnected(false);
+            long now = System.currentTimeMillis();
+            snap.setClockMoveDeadlineWallMs(now + GameRoom.CLOCK_MOVE_MS);
+            int stones = countStones(b);
+            if (stones > 0) {
+                snap.setClockGameDeadlineWallMs(now + GameRoom.CLOCK_GAME_MS);
+            } else {
+                snap.setClockGameDeadlineWallMs(0L);
+            }
+            snap.setClockPauseStartedWallMs(0L);
+            snap.setGameEndReason(null);
+            String json = objectMapper.writeValueAsString(snap);
+            roomGameStateMapper.insertInitial(roomId, json);
+            lastKnownVersion.put(roomId, 0L);
+        } catch (Exception e) {
+            throw new IllegalStateException("写入残局初始状态失败", e);
+        }
+    }
+
+    private static int countStones(int[][] b) {
+        int n = 0;
+        for (int[] row : b) {
+            for (int v : row) {
+                if (v != Stone.EMPTY) {
+                    n++;
+                }
+            }
+        }
+        return n;
     }
 
     public void deleteByRoomId(String roomId) {

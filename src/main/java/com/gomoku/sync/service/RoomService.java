@@ -3,6 +3,7 @@ package com.gomoku.sync.service;
 import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomParticipant;
+import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,38 @@ public class RoomService {
         } catch (Exception e) {
             rooms.remove(roomId);
             throw new IllegalStateException("写入房间参与者失败", e);
+        }
+        return room;
+    }
+
+    /**
+     * 残局好友房：房主与 DB 黑方为同一用户，房主使用 {@link GameRoom#getSpectatorToken()} 旁观；
+     * 好友通过 {@link #joinRoom(String, long)} 入座白方。
+     */
+    public GameRoom createPuzzleFriendRoom(long creatorUserId, int[][] board, int sideToMove) {
+        DailyPuzzleAdminService.validateBoardCells(board, boardSize);
+        if (sideToMove != Stone.BLACK && sideToMove != Stone.WHITE) {
+            throw new IllegalArgumentException("sideToMove 须为 1（黑）或 2（白）");
+        }
+        String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String blackToken = UUID.randomUUID().toString();
+        String spectatorToken = UUID.randomUUID().toString();
+        GameRoom room = new GameRoom(roomId, boardSize, blackToken, creatorUserId);
+        room.setPuzzleRoom(true);
+        room.setObserverUserId(creatorUserId);
+        room.setSpectatorToken(spectatorToken);
+        rooms.put(roomId, room);
+        try {
+            roomParticipantMapper.insertPuzzleBlack(
+                    roomId, creatorUserId, blackToken, creatorUserId, spectatorToken);
+            roomGameStateService.insertPuzzleInitial(roomId, board, sideToMove);
+            roomGameStateService.hydrateRoom(room);
+        } catch (IllegalArgumentException e) {
+            rooms.remove(roomId);
+            throw e;
+        } catch (Exception e) {
+            rooms.remove(roomId);
+            throw new IllegalStateException("创建残局好友房失败", e);
         }
         return room;
     }
@@ -91,6 +124,15 @@ public class RoomService {
                                 ? style
                                 : BotAiStyle.forBotUserId(rp.getWhiteUserId()).ordinal();
                 room.setBotAiStyleOrdinal(ord);
+            }
+        }
+        if (rp.isPuzzleRoom()) {
+            room.setPuzzleRoom(true);
+            if (rp.getObserverToken() != null && !rp.getObserverToken().isEmpty()) {
+                room.setSpectatorToken(rp.getObserverToken());
+            }
+            if (rp.getObserverUserId() != null) {
+                room.setObserverUserId(rp.getObserverUserId());
             }
         }
         roomGameStateService.hydrateRoom(room);
@@ -147,6 +189,9 @@ public class RoomService {
             return false;
         }
         synchronized (room) {
+            if (room.isPuzzleRoom()) {
+                return false;
+            }
             if (room.isWhiteIsBot()) {
                 return false;
             }

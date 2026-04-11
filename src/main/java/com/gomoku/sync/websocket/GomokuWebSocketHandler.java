@@ -33,6 +33,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private static final String ATTR_ROOM = "room";
     private static final String ATTR_COLOR = "color";
+    private static final String ATTR_SPECTATOR = "spectator";
 
     private final RoomService roomService;
     private final RoomGameStateService roomGameStateService;
@@ -100,6 +101,32 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.BAD_DATA);
             return;
         }
+
+        boolean spectator =
+                room.isPuzzleRoom()
+                        && room.getSpectatorToken() != null
+                        && room.getSpectatorToken().equals(token)
+                        && userId.get() == room.getObserverUserId();
+        if (spectator) {
+            roomGameStateService.syncRoomFromDbIfBehind(room);
+            session.getAttributes().put(ATTR_ROOM, room);
+            session.getAttributes().put(ATTR_SPECTATOR, Boolean.TRUE);
+            synchronized (room) {
+                if (room.getSpectatorSession() != null && room.getSpectatorSession().isOpen()) {
+                    sendError(session, "旁观已有连接");
+                    session.close(CloseStatus.NOT_ACCEPTABLE);
+                    return;
+                }
+                room.setSpectatorSession(session);
+            }
+            roomSessionTracker.register(roomId);
+            roomGameStateService.syncRoomFromDbIfBehind(room);
+            applyOnlineClockTimeouts(room);
+            broadcastState(room);
+            maybePlayBot(room);
+            return;
+        }
+
         Integer color = room.resolveColorByToken(token);
         if (color == null) {
             sendError(session, "token 无效");
@@ -153,6 +180,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
+            return;
+        }
         GameRoom room = (GameRoom) session.getAttributes().get(ATTR_ROOM);
         Integer color = (Integer) session.getAttributes().get(ATTR_COLOR);
         if (room == null || color == null) {
@@ -789,6 +819,21 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
+            GameRoom room = (GameRoom) session.getAttributes().get(ATTR_ROOM);
+            if (room == null) {
+                return;
+            }
+            synchronized (room) {
+                if (room.getSpectatorSession() == session) {
+                    room.setSpectatorSession(null);
+                }
+            }
+            roomGameStateService.tryPersist(room);
+            roomSessionTracker.unregister(room.getRoomId());
+            broadcastState(room);
+            return;
+        }
         GameRoom room = (GameRoom) session.getAttributes().get(ATTR_ROOM);
         Integer color = (Integer) session.getAttributes().get(ATTR_COLOR);
         if (room == null || color == null) {
@@ -815,11 +860,15 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     public void broadcastState(GameRoom room) {
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
+        WebSocketSession sp = room.getSpectatorSession();
         if (bs != null && bs.isOpen()) {
-            sendToSession(bs, stateJson(room, Stone.BLACK));
+            sendToSession(bs, stateJson(room, Stone.BLACK, false));
         }
         if (ws != null && ws.isOpen()) {
-            sendToSession(ws, stateJson(room, Stone.WHITE));
+            sendToSession(ws, stateJson(room, Stone.WHITE, false));
+        }
+        if (sp != null && sp.isOpen()) {
+            sendToSession(sp, stateJson(room, Stone.BLACK, true));
         }
     }
 
@@ -838,7 +887,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         return pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(userId);
     }
 
-    private TextMessage stateJson(GameRoom room, int yourColor) {
+    private TextMessage stateJson(GameRoom room, int yourColor, boolean spectator) {
         try {
             ObjectNode n = objectMapper.createObjectNode();
             n.put("type", "STATE");
@@ -853,7 +902,12 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                 n.put("winner", room.getWinner());
             }
             n.put("matchRound", room.getMatchRound());
-            n.put("yourColor", yourColor);
+            n.put("spectator", spectator);
+            if (spectator) {
+                n.putNull("yourColor");
+            } else {
+                n.put("yourColor", yourColor);
+            }
             n.put("blackPieceSkinId", pieceSkinIdForSeat(room.getBlackUserId()));
             Long whiteUid = room.getWhiteUserId();
             if (whiteUid == null) {

@@ -132,11 +132,20 @@ public class RoomController {
         long blackId = rp.getBlackUserId();
         long whiteId = rp.getWhiteUserId();
         long caller = uid.get();
-        if (caller != blackId && caller != whiteId) {
+        boolean asSpectator =
+                rp.isPuzzleRoom()
+                        && rp.getObserverUserId() != null
+                        && caller == rp.getObserverUserId();
+        if (caller != blackId && caller != whiteId && !asSpectator) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(new ApiError("FORBIDDEN", "非本房间玩家"));
         }
-        long opponentId = caller == blackId ? whiteId : blackId;
+        long opponentId;
+        if (asSpectator) {
+            opponentId = whiteId;
+        } else {
+            opponentId = caller == blackId ? whiteId : blackId;
+        }
         User u = userMapper.selectById(opponentId);
         if (u == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

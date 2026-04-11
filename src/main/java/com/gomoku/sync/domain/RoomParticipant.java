@@ -15,6 +15,10 @@ public class RoomParticipant {
     private Integer botSearchDepthMax;
     /** 人机棋风，见 BotAiStyle.ordinal；NULL 表示由 white_user_id 推导 */
     private Integer botAiStyle;
+    /** 与 black 同用户时可仅连旁观 WS；NULL 表示非残局好友房 */
+    private Long observerUserId;
+    private String observerToken;
+    private boolean puzzleRoom;
 
     public String getRoomId() {
         return roomId;
@@ -86,5 +90,29 @@ public class RoomParticipant {
 
     public void setBotAiStyle(Integer botAiStyle) {
         this.botAiStyle = botAiStyle;
+    }
+
+    public Long getObserverUserId() {
+        return observerUserId;
+    }
+
+    public void setObserverUserId(Long observerUserId) {
+        this.observerUserId = observerUserId;
+    }
+
+    public String getObserverToken() {
+        return observerToken;
+    }
+
+    public void setObserverToken(String observerToken) {
+        this.observerToken = observerToken;
+    }
+
+    public boolean isPuzzleRoom() {
+        return puzzleRoom;
+    }
+
+    public void setPuzzleRoom(boolean puzzleRoom) {
+        this.puzzleRoom = puzzleRoom;
     }
 }
