@@ -5,6 +5,7 @@ import com.gomoku.sync.api.dto.RandomMatchPairedResponse;
 import com.gomoku.sync.api.dto.RandomMatchResponse;
 import com.gomoku.sync.api.dto.FallbackBotResponse;
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.domain.User;
 import com.gomoku.sync.service.MatchmakingService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
@@ -116,12 +117,13 @@ public class MatchController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new ApiError("UNAUTHORIZED", "请先登录"));
         }
-        MatchmakingService.FallbackBotOutcome o =
+        MatchmakingService.AssignRandomBotResult ar =
                 matchmakingService.assignRandomBot(roomId, blackToken, uid.get());
+        MatchmakingService.FallbackBotOutcome o = ar.getOutcome();
         if (o == MatchmakingService.FallbackBotOutcome.OK) {
             GameRoom room = roomService.getRoom(roomId);
             int bs = room != null ? room.getSize() : 15;
-            return ResponseEntity.ok(new FallbackBotResponse(true, bs));
+            return ResponseEntity.ok(new FallbackBotResponse(true, bs, ar.getBotUser()));
         }
         if (o == MatchmakingService.FallbackBotOutcome.HAS_GUEST) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
@@ -137,5 +139,24 @@ public class MatchController {
         }
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError("ROOM_NOT_FOUND", "房间不存在"));
+    }
+
+    /**
+     * 随机一名人机账号的公开资料（用于本地随机兜底 UI）；需登录。
+     */
+    @GetMapping("/random/bot-profile")
+    public ResponseEntity<?> randomBotProfile(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        User bot = matchmakingService.previewRandomBotProfile();
+        if (bot == null) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(new ApiError("NO_BOTS", "暂无人机账号"));
+        }
+        return ResponseEntity.ok(new FallbackBotResponse(false, 15, bot));
     }
 }

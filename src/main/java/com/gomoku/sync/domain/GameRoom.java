@@ -68,11 +68,13 @@ public class GameRoom {
     public static final long CLOCK_GAME_MS = 1_800_000L;
     public static final String END_REASON_TIME_DRAW = "TIME_DRAW";
     public static final String END_REASON_MOVE_TIMEOUT = "MOVE_TIMEOUT";
+    /** 认输终局：STATE.gameEndReason 供客户端结算展示 */
+    public static final String END_REASON_RESIGN = "RESIGN";
 
     private long clockMoveDeadlineWallMs;
     private long clockGameDeadlineWallMs;
     private long clockPauseStartedWallMs;
-    /** 终局原因，仅时钟类终局写入 */
+    /** 终局原因：时钟类、认输等；广播于 STATE.gameEndReason */
     private String gameEndReason;
 
     /**
@@ -570,6 +572,55 @@ public class GameRoom {
     }
 
     /**
+     * 随机匹配超时接入人机后：交换黑/白座位与 token，使真人可能执白、人机执黑（棋盘须仍为空）。
+     * 与 {@link #swapHumanSeats()} 不同，本方法允许一侧为人机。
+     */
+    public void swapBlackWhiteSeatsHumanVsBot() {
+        lock.lock();
+        try {
+            if (puzzleRoom) {
+                throw new IllegalStateException("残局房不可交换座位");
+            }
+            if (whiteToken == null || whiteUserId == null) {
+                throw new IllegalStateException("白方未入座");
+            }
+            if (!isBoardEmpty()) {
+                throw new IllegalStateException("已有落子，不可交换座位");
+            }
+            if (whiteIsBot == blackIsBot) {
+                throw new IllegalStateException("须恰有一方为人机");
+            }
+            boolean oldWb = whiteIsBot;
+            boolean oldBb = blackIsBot;
+            whiteIsBot = oldBb;
+            blackIsBot = oldWb;
+
+            long oldBlackUid = blackUserId;
+            String oldBlackTok = blackToken;
+            long oldWhiteUid = whiteUserId;
+            String oldWhiteTok = whiteToken;
+
+            blackUserId = oldWhiteUid;
+            blackToken = oldWhiteTok;
+            whiteUserId = oldBlackUid;
+            whiteToken = oldBlackTok;
+
+            WebSocketSession sb = blackSession;
+            blackSession = whiteSession;
+            whiteSession = sb;
+
+            boolean cb = clusterBlackConnected;
+            clusterBlackConnected = clusterWhiteConnected;
+            clusterWhiteConnected = cb;
+
+            refreshWebSocketSeatColorsFromTokens();
+            initClockForFreshBoard();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
      * 交换后 URI 中 token 不变，但房间侧黑/白 token 已对调，须按当前 token 重算 seat 色，否则与
      * {@link com.gomoku.sync.websocket.GomokuWebSocketHandler} 建立连接时写入的 ATTR 不一致（例如房主先连 WS 再配对）。
      */
@@ -990,7 +1041,7 @@ public class GameRoom {
             clockPauseStartedWallMs = 0L;
             gameOver = true;
             winner = oppositeColor(color);
-            gameEndReason = null;
+            gameEndReason = END_REASON_RESIGN;
             return null;
         } finally {
             lock.unlock();

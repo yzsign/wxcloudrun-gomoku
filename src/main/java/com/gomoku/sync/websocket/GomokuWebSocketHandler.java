@@ -6,8 +6,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.gomoku.sync.ai.BotAiStyle;
 import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.domain.RoomChatMessage;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.service.PieceSkinSelectionService;
+import com.gomoku.sync.service.RoomChatService;
 import com.gomoku.sync.service.RoomGameStateService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
@@ -34,6 +36,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private static final String ATTR_ROOM = "room";
     private static final String ATTR_COLOR = "color";
     private static final String ATTR_SPECTATOR = "spectator";
+    private static final String ATTR_USER_ID = "userId";
 
     private final RoomService roomService;
     private final RoomGameStateService roomGameStateService;
@@ -41,6 +44,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private final ObjectMapper objectMapper;
     private final SessionJwtService sessionJwtService;
     private final PieceSkinSelectionService pieceSkinSelectionService;
+    private final RoomChatService roomChatService;
     private final ScheduledExecutorService botScheduler;
     /** 人机落子延迟任务，同房间新调度会取消旧任务 */
     private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotMoves = new ConcurrentHashMap<>();
@@ -58,6 +62,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             ObjectMapper objectMapper,
             SessionJwtService sessionJwtService,
             PieceSkinSelectionService pieceSkinSelectionService,
+            RoomChatService roomChatService,
             ScheduledExecutorService gomokuBotScheduler) {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
@@ -65,6 +70,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         this.objectMapper = objectMapper;
         this.sessionJwtService = sessionJwtService;
         this.pieceSkinSelectionService = pieceSkinSelectionService;
+        this.roomChatService = roomChatService;
         this.botScheduler = gomokuBotScheduler;
     }
 
@@ -95,6 +101,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.BAD_DATA);
             return;
         }
+        session.getAttributes().put(ATTR_USER_ID, userId.get());
         GameRoom room = roomService.getRoom(roomId);
         if (room == null) {
             sendError(session, "房间不存在");
@@ -226,8 +233,46 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             handleDrawReject(session, room, color);
         } else if ("DRAW_CANCEL".equals(type)) {
             handleDrawCancel(session, room, color);
+        } else if ("CHAT_SEND".equals(type)) {
+            handleChatSend(session, room, color, root);
         } else {
             sendToSession(session, error("未知消息类型: " + type));
+        }
+    }
+
+    private void handleChatSend(WebSocketSession session, GameRoom room, int color, JsonNode root)
+            throws Exception {
+        RoomChatMessage row = new RoomChatMessage();
+        Optional<String> err = roomChatService.validateAndInsert(room, color, roomSenderUserId(session), root, row);
+        if (err.isPresent()) {
+            sendToSession(session, error(err.get()));
+            return;
+        }
+        String json = objectMapper.writeValueAsString(roomChatService.toChatBroadcastJson(row, color));
+        broadcastChat(room, new TextMessage(json));
+    }
+
+    private long roomSenderUserId(WebSocketSession session) {
+        Object v = session.getAttributes().get(ATTR_USER_ID);
+        if (v instanceof Long) {
+            return (Long) v;
+        }
+        return -1L;
+    }
+
+    /** 对局双方与旁观均收到 */
+    private void broadcastChat(GameRoom room, TextMessage msg) {
+        WebSocketSession bs = room.getBlackSession();
+        WebSocketSession ws = room.getWhiteSession();
+        WebSocketSession sp = room.getSpectatorSession();
+        if (bs != null && bs.isOpen()) {
+            sendToSession(bs, msg);
+        }
+        if (ws != null && ws.isOpen()) {
+            sendToSession(ws, msg);
+        }
+        if (sp != null && sp.isOpen()) {
+            sendToSession(sp, msg);
         }
     }
 

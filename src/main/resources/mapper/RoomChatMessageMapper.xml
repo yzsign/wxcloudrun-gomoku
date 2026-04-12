@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.RoomChatMessageMapper">
+
+    <resultMap id="Row" type="com.gomoku.sync.domain.RoomChatMessage">
+        <id property="id" column="id"/>
+        <result property="roomId" column="room_id"/>
+        <result property="senderUserId" column="sender_user_id"/>
+        <result property="kind" column="kind"/>
+        <result property="content" column="content"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO room_chat_message (room_id, sender_user_id, kind, content)
+        VALUES (#{roomId}, #{senderUserId}, #{kind}, #{content})
+    </insert>
+
+    <select id="selectById" resultMap="Row">
+        SELECT id, room_id, sender_user_id, kind, content, created_at
+        FROM room_chat_message
+        WHERE id = #{id}
+    </select>
+
+    <!-- 最近 N 条，按时间正序返回 -->
+    <select id="selectByRoomIdAsc" resultMap="Row">
+        SELECT id, room_id, sender_user_id, kind, content, created_at
+        FROM (
+                 SELECT id, room_id, sender_user_id, kind, content, created_at
+                 FROM room_chat_message
+                 WHERE room_id = #{roomId}
+                 ORDER BY id DESC
+                 LIMIT #{limit}
+             ) t
+        ORDER BY id ASC
+    </select>
+</mapper>

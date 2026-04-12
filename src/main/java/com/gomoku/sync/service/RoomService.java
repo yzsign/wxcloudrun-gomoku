@@ -324,6 +324,59 @@ public class RoomService {
         }
     }
 
+    /**
+     * 随机匹配超时接入白方人机后：50% 交换座位，使房主可能执白、人机执黑（棋盘须仍为空）。
+     */
+    public void maybeRandomSwapHumanBotSides(String roomId) {
+        GameRoom room = getRoom(roomId);
+        if (room == null) {
+            return;
+        }
+        synchronized (room) {
+            if (room.isPuzzleRoom()) {
+                return;
+            }
+            if (!room.hasGuest() || !room.isBoardEmpty()) {
+                return;
+            }
+            if (room.isWhiteIsBot() == room.isBlackIsBot()) {
+                return;
+            }
+            if (!ThreadLocalRandom.current().nextBoolean()) {
+                return;
+            }
+            try {
+                room.swapBlackWhiteSeatsHumanVsBot();
+                int n =
+                        roomParticipantMapper.updateBothSides(
+                                roomId,
+                                room.getBlackUserId(),
+                                room.getBlackToken(),
+                                room.getWhiteUserId(),
+                                room.getWhiteToken());
+                if (n != 1) {
+                    room.swapBlackWhiteSeatsHumanVsBot();
+                    return;
+                }
+                roomParticipantMapper.updatePuzzleRoomBots(
+                        roomId,
+                        room.isWhiteIsBot(),
+                        room.isBlackIsBot(),
+                        room.getBotSearchDepthMin(),
+                        room.getBotSearchDepthMax(),
+                        room.getBotAiStyleOrdinal());
+            } catch (Exception e) {
+                try {
+                    room.swapBlackWhiteSeatsHumanVsBot();
+                } catch (Exception ignored) {
+                    // ignored
+                }
+                throw new IllegalStateException("人机座位随机交换失败", e);
+            }
+            roomGameStateService.tryPersist(room);
+        }
+    }
+
     public static final class JoinResult {
         private final boolean ok;
         /** 加入方 WebSocket token */

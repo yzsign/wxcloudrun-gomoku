@@ -16,6 +16,7 @@ class GameRoomResignTest {
         assertNull(room.tryResign(Stone.BLACK));
         assertTrue(room.isGameOver());
         assertEquals(Stone.WHITE, room.getWinner());
+        assertEquals(GameRoom.END_REASON_RESIGN, room.getGameEndReason());
     }
 
     @Test

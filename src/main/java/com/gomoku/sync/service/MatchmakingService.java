@@ -138,25 +138,52 @@ public class MatchmakingService {
         NO_BOTS
     }
 
+    /** {@link #assignRandomBot} 成功时含入座人机，供客户端展示昵称与头像 */
+    public static final class AssignRandomBotResult {
+        private final FallbackBotOutcome outcome;
+        private final User botUser;
+
+        private AssignRandomBotResult(FallbackBotOutcome outcome, User botUser) {
+            this.outcome = outcome;
+            this.botUser = botUser;
+        }
+
+        public static AssignRandomBotResult of(FallbackBotOutcome outcome) {
+            return new AssignRandomBotResult(outcome, null);
+        }
+
+        public static AssignRandomBotResult ok(User botUser) {
+            return new AssignRandomBotResult(FallbackBotOutcome.OK, botUser);
+        }
+
+        public FallbackBotOutcome getOutcome() {
+            return outcome;
+        }
+
+        public User getBotUser() {
+            return botUser;
+        }
+    }
+
     /**
      * 匹配超时：从数据库随机一名人机加入房间（白方），房主仍为黑方。
      */
-    public FallbackBotOutcome assignRandomBot(String roomId, String blackToken, long blackUserId) {
+    public AssignRandomBotResult assignRandomBot(String roomId, String blackToken, long blackUserId) {
         synchronized (lock) {
             GameRoom room = roomService.getRoom(roomId);
             if (room == null) {
                 waitingRoomIds.remove(roomId);
-                return FallbackBotOutcome.ROOM_NOT_FOUND;
+                return AssignRandomBotResult.of(FallbackBotOutcome.ROOM_NOT_FOUND);
             }
             if (!room.getBlackToken().equals(blackToken) || room.getBlackUserId() != blackUserId) {
-                return FallbackBotOutcome.BAD_TOKEN;
+                return AssignRandomBotResult.of(FallbackBotOutcome.BAD_TOKEN);
             }
             if (room.hasGuest()) {
-                return FallbackBotOutcome.HAS_GUEST;
+                return AssignRandomBotResult.of(FallbackBotOutcome.HAS_GUEST);
             }
             Long botId = userMapper.selectRandomBotId();
             if (botId == null) {
-                return FallbackBotOutcome.NO_BOTS;
+                return AssignRandomBotResult.of(FallbackBotOutcome.NO_BOTS);
             }
             waitingRoomIds.remove(roomId);
             RoomService.JoinResult jr = roomService.joinRoom(roomId, botId);
@@ -165,7 +192,7 @@ public class MatchmakingService {
                 if ("ROOM_NOT_FOUND".equals(jr.getError())) {
                     roomService.removeRoomIfExists(roomId);
                 }
-                return FallbackBotOutcome.ROOM_NOT_FOUND;
+                return AssignRandomBotResult.of(FallbackBotOutcome.ROOM_NOT_FOUND);
             }
             int dmin = 2;
             int dmax = 3;
@@ -186,7 +213,19 @@ public class MatchmakingService {
             room.setBotAiStyleOrdinal(styleOrd);
             room.setWhiteIsBot(true);
             roomService.persistWhiteBotMeta(roomId, dmin, dmax, styleOrd);
-            return FallbackBotOutcome.OK;
+            roomService.maybeRandomSwapHumanBotSides(roomId);
+            return AssignRandomBotResult.ok(botUser);
         }
+    }
+
+    /**
+     * 随机一名人机账号的公开资料（用于客户端本地随机兜底展示，不与对局强绑定）。
+     */
+    public User previewRandomBotProfile() {
+        Long botId = userMapper.selectRandomBotId();
+        if (botId == null) {
+            return null;
+        }
+        return userMapper.selectById(botId);
     }
 }

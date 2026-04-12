@@ -6,6 +6,7 @@ import com.gomoku.sync.api.dto.JoinRoomResponse;
 import com.gomoku.sync.api.dto.RoomResource;
 import com.gomoku.sync.api.dto.UserRatingResponse;
 import com.gomoku.sync.domain.GameRoom;
+import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
@@ -109,8 +110,23 @@ public class RoomController {
                     .body(new ApiError("ROOM_FULL", "房间已满"));
         }
         GameRoom room = roomService.getRoom(roomId);
+        if (room != null && !room.isPuzzleRoom()) {
+            roomService.maybeSwapRandomSides(roomId);
+            room = roomService.getRoom(roomId);
+        }
+        int yourColor =
+                jr.getGuestColor() != null ? jr.getGuestColor() : Stone.WHITE;
+        if (room != null) {
+            Integer resolved = room.resolveColorByToken(jr.getGuestToken());
+            if (resolved != null) {
+                yourColor = resolved;
+            }
+        }
         return ResponseEntity.ok(
-                new JoinRoomResponse(room.getSize(), jr.getGuestToken(), jr.getGuestColor()));
+                new JoinRoomResponse(
+                        room != null ? room.getSize() : roomService.getBoardSize(),
+                        jr.getGuestToken(),
+                        yourColor));
     }
 
     /**

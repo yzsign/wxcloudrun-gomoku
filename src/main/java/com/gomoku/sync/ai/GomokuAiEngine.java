@@ -5,7 +5,9 @@ import com.gomoku.sync.domain.WinChecker;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -27,13 +29,16 @@ public final class GomokuAiEngine {
     private static final long MOVE_TIME_BUDGET_NANOS = 70_000_000L;
     /** 实际搜索深度上限（与 DB 取 min） */
     private static final int EFFECTIVE_DEPTH_CAP = 6;
+    /** 对手威胁权重（文档规则3），与 gomoku.js OPP_LINE_PATTERN_MULT 一致 */
+    private static final double OPP_LINE_PATTERN_MULT = 1.3;
     /**
-     * 对手线型威胁在评估中加权：强化对活二、活三、活四（及冲四等）的防守倾向，与
-     * {@link #ORDER_OPP_BLOCK_WEIGHT} 候选排序配合。
+     * 候选排序：对方在该点若落子的棋型威胁再乘此系数（与前端 moveOrderingScore 中防守侧一致）
      */
-    private static final double OPP_LINE_PATTERN_MULT = 1.18;
-    /** 候选排序：同点对方假想棋型分权重（与 gomoku.js sortMovesByHeuristic 一致） */
-    private static final double ORDER_OPP_BLOCK_WEIGHT = 1.55;
+    private static final double ORDER_OPP_BLOCK_WEIGHT = 1.3;
+    /** 双威胁对进攻分的倍数（文档规则2） */
+    private static final int DOUBLE_THREAT_ATTACK_MULT = 4;
+    /** 强制优先级最高执行到第几层（3–6），与前端 gomoku.js 一致 */
+    private static final int FORCED_TIERS_MAX = 6;
 
     private static final ThreadLocal<Long> DEADLINE_NANOS = new ThreadLocal<>();
     private static final ThreadLocal<BotAiStyle> AI_STYLE = new ThreadLocal<>();
@@ -114,12 +119,17 @@ public final class GomokuAiEngine {
             return block;
         }
 
+        int[] forced = findForcedPriorityMove(board, size, aiColor);
+        if (forced != null) {
+            return forced;
+        }
+
         List<int[]> cands = getCandidates(board, size);
         if (cands.isEmpty()) {
             return new int[]{size / 2, size / 2};
         }
 
-        sortCandidates(board, size, cands, aiColor, opp, st);
+        sortCandidates(board, size, cands, aiColor, st);
 
         int cap = Math.min(MAX_CANDIDATES_ROOT, cands.size());
         cands = cands.subList(0, cap);
@@ -188,20 +198,25 @@ public final class GomokuAiEngine {
             int[][] board,
             int size,
             List<int[]> cands,
-            int aiColor,
-            int opp,
+            int moveForColor,
             BotAiStyle st) {
         double wm = st.getOrderMyW();
         double wo = st.getOrderOppW();
+        int opp = opposite(moveForColor);
         cands.sort(
                 Comparator.comparingDouble(
-                        (int[] m) -> {
-                            int r = m[0];
-                            int c = m[1];
-                            double h = heuristicMoveScore(board, size, r, c, aiColor);
-                            double h2 = heuristicMoveScore(board, size, r, c, opp);
-                            return -(wm * h + wo * (h2 * ORDER_OPP_BLOCK_WEIGHT));
-                        }));
+                                (int[] m) -> {
+                                    int r = m[0];
+                                    int c = m[1];
+                                    MoveAnalysis my =
+                                            analyzeMovePattern(board, size, r, c, moveForColor);
+                                    MoveAnalysis op = analyzeMovePattern(board, size, r, c, opp);
+                                    double h = my != null ? shapeThreatScore(my) : 0;
+                                    double h2 = op != null ? shapeThreatScore(op) : 0;
+                                    return -(wm * h + wo * (h2 * ORDER_OPP_BLOCK_WEIGHT));
+                                })
+                        .thenComparingDouble(
+                                m -> -centerTieBreakScore(m[0], m[1], size)));
     }
 
     private static int maxCandForDepth(int depthRemaining) {
@@ -237,7 +252,7 @@ public final class GomokuAiEngine {
         if (cands.isEmpty()) {
             return evaluateBoard(board, size, aiColor, st);
         }
-        sortCandidates(board, size, cands, aiColor, opp, st);
+        sortCandidates(board, size, cands, turn, st);
         int cap = Math.min(maxCandForDepth(depth), cands.size());
         cands = cands.subList(0, cap);
 
@@ -414,50 +429,363 @@ public final class GomokuAiEngine {
     }
 
     /**
-     * 与 gomoku.js linePatternScore 一致：连子长度与两端是否为空决定活二/活三/活四等权重。
+     * 与 gomoku.js patternMagnitude 一致：文档第四节量级（五连、活四、冲四、活三、活二）。
      */
     private static int patternMagnitude(int len, boolean leftOpen, boolean rightOpen) {
         int openEnds = (leftOpen ? 1 : 0) + (rightOpen ? 1 : 0);
         if (len >= 5) {
-            return 10_000_000;
+            return 100_000;
         }
         if (len == 4) {
             if (openEnds == 2) {
-                return 500_000;
+                return 10_000;
             }
             if (openEnds == 1) {
-                return 120_000;
+                return 1_000;
             }
-            return 8_000;
+            return 50;
         }
         if (len == 3) {
             if (openEnds == 2) {
-                return 45_000;
-            }
-            if (openEnds == 1) {
-                return 6_000;
-            }
-            return 400;
-        }
-        if (len == 2) {
-            if (openEnds == 2) {
-                return 2_200;
-            }
-            if (openEnds == 1) {
-                return 350;
-            }
-            return 40;
-        }
-        if (len == 1) {
-            if (openEnds == 2) {
-                return 120;
+                return 100;
             }
             if (openEnds == 1) {
                 return 25;
             }
-            return 3;
+            return 2;
+        }
+        if (len == 2) {
+            if (openEnds == 2) {
+                return 5;
+            }
+            if (openEnds == 1) {
+                return 1;
+            }
+            return 0;
+        }
+        if (len == 1) {
+            if (openEnds == 2) {
+                return 1;
+            }
+            return 0;
         }
         return 0;
+    }
+
+    private static final class LineRunInfo {
+        final int len;
+        final boolean leftOpen;
+        final boolean rightOpen;
+
+        LineRunInfo(int len, boolean leftOpen, boolean rightOpen) {
+            this.len = len;
+            this.leftOpen = leftOpen;
+            this.rightOpen = rightOpen;
+        }
+    }
+
+    private static final class MoveAnalysis {
+        boolean hasWin;
+        int nL4;
+        int nR4;
+        int nL3;
+        int nS3;
+        int nL2;
+        boolean doubleRushFour;
+        /** 文档规则2：两路冲四且制胜空位不同 */
+        boolean independentDoubleRushFour;
+        boolean doubleLiveThree;
+        boolean liveThreeAndRushFour;
+    }
+
+    private static LineRunInfo getLineRunInfo(
+            int[][] board, int size, int r, int c, int dr, int dc, int color) {
+        int len = 1;
+        int nr = r - dr;
+        int nc = c - dc;
+        while (nr >= 0 && nr < size && nc >= 0 && nc < size && board[nr][nc] == color) {
+            len++;
+            nr -= dr;
+            nc -= dc;
+        }
+        int leftEnd =
+                (nr >= 0 && nr < size && nc >= 0 && nc < size) ? board[nr][nc] : -1;
+        nr = r + dr;
+        nc = c + dc;
+        while (nr >= 0 && nr < size && nc >= 0 && nc < size && board[nr][nc] == color) {
+            len++;
+            nr += dr;
+            nc += dc;
+        }
+        int rightEnd =
+                (nr >= 0 && nr < size && nc >= 0 && nc < size) ? board[nr][nc] : -1;
+        boolean leftOpen = leftEnd == Stone.EMPTY;
+        boolean rightOpen = rightEnd == Stone.EMPTY;
+        return new LineRunInfo(len, leftOpen, rightOpen);
+    }
+
+    /** @return L4 / R4 / L3 / S3 / L2 / X */
+    private static char classifySegment(int len, boolean leftOpen, boolean rightOpen) {
+        if (len >= 5) {
+            return 'W';
+        }
+        if (len == 4) {
+            if (leftOpen && rightOpen) {
+                return '4';
+            }
+            if (leftOpen || rightOpen) {
+                return 'R';
+            }
+            return 'X';
+        }
+        if (len == 3) {
+            if (leftOpen && rightOpen) {
+                return '3';
+            }
+            if (leftOpen || rightOpen) {
+                return 'S';
+            }
+            return 'X';
+        }
+        if (len == 2) {
+            if (leftOpen && rightOpen) {
+                return '2';
+            }
+            return 'X';
+        }
+        return 'N';
+    }
+
+    private static MoveAnalysis analyzeMovePattern(
+            int[][] board, int size, int r, int c, int color) {
+        if (r < 0 || r >= size || c < 0 || c >= size || board[r][c] != Stone.EMPTY) {
+            return null;
+        }
+        board[r][c] = color;
+        MoveAnalysis a = new MoveAnalysis();
+        a.hasWin = WinChecker.checkWin(board, size, r, c, color);
+        for (int[] dir : DIRS) {
+            LineRunInfo info = getLineRunInfo(board, size, r, c, dir[0], dir[1], color);
+            char seg = classifySegment(info.len, info.leftOpen, info.rightOpen);
+            if (seg == '4') {
+                a.nL4++;
+            } else if (seg == 'R') {
+                a.nR4++;
+            } else if (seg == '3') {
+                a.nL3++;
+            } else if (seg == 'S') {
+                a.nS3++;
+            } else if (seg == '2') {
+                a.nL2++;
+            }
+        }
+        a.doubleRushFour = a.nR4 >= 2;
+        a.independentDoubleRushFour = a.nR4 >= 2 && areIndependentRushFours(board, size, r, c, color);
+        a.doubleLiveThree = a.nL3 >= 2;
+        a.liveThreeAndRushFour = a.nL3 >= 1 && a.nR4 >= 1;
+        board[r][c] = Stone.EMPTY;
+        return a;
+    }
+
+    /** 冲四：下一手成五的空位（与 gomoku.js rushFourWinningCell 一致） */
+    private static int[] rushFourWinningCell(
+            int[][] board, int size, int r, int c, int dr, int dc, int color) {
+        int lr = r;
+        int lc = c;
+        while (lr - dr >= 0
+                && lr - dr < size
+                && lc - dc >= 0
+                && lc - dc < size
+                && board[lr - dr][lc - dc] == color) {
+            lr -= dr;
+            lc -= dc;
+        }
+        int rr = r;
+        int rc = c;
+        while (rr + dr >= 0
+                && rr + dr < size
+                && rc + dc >= 0
+                && rc + dc < size
+                && board[rr + dr][rc + dc] == color) {
+            rr += dr;
+            rc += dc;
+        }
+        int leftE =
+                (lr - dr >= 0 && lr - dr < size && lc - dc >= 0 && lc - dc < size)
+                        ? board[lr - dr][lc - dc]
+                        : -1;
+        int rightE =
+                (rr + dr >= 0 && rr + dr < size && rc + dc >= 0 && rc + dc < size)
+                        ? board[rr + dr][rc + dc]
+                        : -1;
+        if (leftE == Stone.EMPTY && rightE != Stone.EMPTY) {
+            return new int[] {lr - dr, lc - dc};
+        }
+        if (rightE == Stone.EMPTY && leftE != Stone.EMPTY) {
+            return new int[] {rr + dr, rc + dc};
+        }
+        return null;
+    }
+
+    private static boolean areIndependentRushFours(
+            int[][] board, int size, int r, int c, int color) {
+        Set<String> keys = new HashSet<>();
+        for (int[] dir : DIRS) {
+            LineRunInfo info = getLineRunInfo(board, size, r, c, dir[0], dir[1], color);
+            if (classifySegment(info.len, info.leftOpen, info.rightOpen) != 'R') {
+                continue;
+            }
+            int[] w = rushFourWinningCell(board, size, r, c, dir[0], dir[1], color);
+            if (w == null) {
+                continue;
+            }
+            keys.add(w[0] + "," + w[1]);
+        }
+        return keys.size() >= 2;
+    }
+
+    private static double shapeThreatScore(MoveAnalysis a) {
+        if (a == null) {
+            return 0;
+        }
+        if (a.hasWin) {
+            return 100_000;
+        }
+        if (a.independentDoubleRushFour) {
+            return 12_000;
+        }
+        if (a.nL4 >= 1) {
+            return 10_000;
+        }
+        double v = a.nR4 * 1000.0 + a.nL3 * 100.0 + a.nS3 * 25.0 + a.nL2 * 5.0;
+        boolean doubleThreat =
+                (a.doubleLiveThree || a.liveThreeAndRushFour) && a.nL4 < 1;
+        if (doubleThreat) {
+            double bump = a.liveThreeAndRushFour ? 1500.0 : 500.0;
+            if (a.doubleLiveThree && a.liveThreeAndRushFour) {
+                bump = 1500.0;
+            }
+            v = Math.max(v, bump);
+            v *= DOUBLE_THREAT_ATTACK_MULT;
+        }
+        return v;
+    }
+
+    /** 规则5：同分时天元/星位优先（与 gomoku.js centerTieBreakScore 一致） */
+    private static double centerTieBreakScore(int r, int c, int size) {
+        double mid = (size - 1) / 2.0;
+        double man = Math.abs(r - mid) + Math.abs(c - mid);
+        double cheb = Math.max(Math.abs(r - mid), Math.abs(c - mid));
+        return -(man + 0.5 * cheb);
+    }
+
+    private static int[] pickBestByCenter(List<int[]> moves, int size) {
+        if (moves == null || moves.isEmpty()) {
+            return null;
+        }
+        int[] best = moves.get(0);
+        double bestP = centerTieBreakScore(best[0], best[1], size);
+        for (int i = 1; i < moves.size(); i++) {
+            int[] m = moves.get(i);
+            double p = centerTieBreakScore(m[0], m[1], size);
+            if (p > bestP) {
+                bestP = p;
+                best = m;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * 文档优先级 3–6：活四/双冲四、防对方活四/双冲四、双威胁攻防（在必胜/必堵五连之后）。
+     */
+    private static int[] findForcedPriorityMove(int[][] board, int size, int aiColor) {
+        if (FORCED_TIERS_MAX < 3) {
+            return null;
+        }
+        int opp = opposite(aiColor);
+        List<int[]> tier3 = new ArrayList<>();
+        for (int r = 0; r < size; r++) {
+            for (int c = 0; c < size; c++) {
+                if (board[r][c] != Stone.EMPTY) {
+                    continue;
+                }
+                MoveAnalysis a = analyzeMovePattern(board, size, r, c, aiColor);
+                if (a == null || a.hasWin) {
+                    continue;
+                }
+                if (a.nL4 >= 1 || a.independentDoubleRushFour) {
+                    tier3.add(new int[] {r, c});
+                }
+            }
+        }
+        if (!tier3.isEmpty()) {
+            return pickBestByCenter(tier3, size);
+        }
+        if (FORCED_TIERS_MAX < 4) {
+            return null;
+        }
+        List<int[]> tier4 = new ArrayList<>();
+        for (int r = 0; r < size; r++) {
+            for (int c = 0; c < size; c++) {
+                if (board[r][c] != Stone.EMPTY) {
+                    continue;
+                }
+                MoveAnalysis b = analyzeMovePattern(board, size, r, c, opp);
+                if (b != null && (b.nL4 >= 1 || b.independentDoubleRushFour)) {
+                    tier4.add(new int[] {r, c});
+                }
+            }
+        }
+        if (!tier4.isEmpty()) {
+            return pickBestByCenter(tier4, size);
+        }
+        if (FORCED_TIERS_MAX < 5) {
+            return null;
+        }
+        List<int[]> tier5 = new ArrayList<>();
+        for (int r = 0; r < size; r++) {
+            for (int c = 0; c < size; c++) {
+                if (board[r][c] != Stone.EMPTY) {
+                    continue;
+                }
+                MoveAnalysis s = analyzeMovePattern(board, size, r, c, aiColor);
+                if (s == null || s.hasWin) {
+                    continue;
+                }
+                if (s.nL4 >= 1 || s.independentDoubleRushFour) {
+                    continue;
+                }
+                if (s.doubleLiveThree || s.liveThreeAndRushFour) {
+                    tier5.add(new int[] {r, c});
+                }
+            }
+        }
+        if (!tier5.isEmpty()) {
+            return pickBestByCenter(tier5, size);
+        }
+        if (FORCED_TIERS_MAX < 6) {
+            return null;
+        }
+        List<int[]> tier6 = new ArrayList<>();
+        for (int r = 0; r < size; r++) {
+            for (int c = 0; c < size; c++) {
+                if (board[r][c] != Stone.EMPTY) {
+                    continue;
+                }
+                MoveAnalysis t = analyzeMovePattern(board, size, r, c, opp);
+                if (t == null || t.nL4 >= 1 || t.independentDoubleRushFour) {
+                    continue;
+                }
+                if (t.doubleLiveThree || t.liveThreeAndRushFour) {
+                    tier6.add(new int[] {r, c});
+                }
+            }
+        }
+        if (!tier6.isEmpty()) {
+            return pickBestByCenter(tier6, size);
+        }
+        return null;
     }
 
     /** 假设在空位落子后的四向棋型分之和（用于候选排序） */
@@ -535,7 +863,7 @@ public final class GomokuAiEngine {
             list.add(new int[]{size / 2, size / 2});
             return list;
         }
-        int ring = 3;
+        int ring = 2;
         boolean[][] seen = new boolean[size][size];
         for (int r = 0; r < size; r++) {
             for (int c = 0; c < size; c++) {
@@ -566,6 +894,7 @@ public final class GomokuAiEngine {
                     }
                 }
             }
+            list.sort(Comparator.comparingDouble(m -> -centerTieBreakScore(m[0], m[1], size)));
         }
         return list;
     }
