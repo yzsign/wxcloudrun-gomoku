@@ -192,11 +192,25 @@ public class RoomService {
             return JoinResult.notFound();
         }
         synchronized (room) {
+            /**
+             * 已入座用户再次「加入」（冷启动、onShow 带分享参数）：返回当前座位 token，避免 hasGuest 误判为已满。
+             */
+            Long whiteUid = room.getWhiteUserId();
+            long blackUid = room.getBlackUserId();
+            if (whiteUid != null && whiteUid == guestUserId) {
+                return JoinResult.ok(room.getWhiteToken(), Stone.WHITE);
+            }
+            if (blackUid == guestUserId) {
+                if (!room.isPuzzleRoom()) {
+                    return JoinResult.sameUser();
+                }
+                if (room.getObserverUserId() == guestUserId) {
+                    return JoinResult.sameUser();
+                }
+                return JoinResult.ok(room.getBlackToken(), Stone.BLACK);
+            }
             if (room.hasGuest()) {
                 return JoinResult.full();
-            }
-            if (room.getBlackUserId() == guestUserId) {
-                return JoinResult.sameUser();
             }
             boolean puzzle =
                     room.isPuzzleRoom()
@@ -292,6 +306,9 @@ public class RoomService {
                 return false;
             }
             if (!room.hasGuest()) {
+                return false;
+            }
+            if (!room.isBoardEmpty()) {
                 return false;
             }
             if (!ThreadLocalRandom.current().nextBoolean()) {

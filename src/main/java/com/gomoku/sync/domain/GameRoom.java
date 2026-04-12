@@ -423,8 +423,16 @@ public class GameRoom {
         }
     }
 
+    /**
+     * 白方是否已入座（真人或人机）。仅以 token 判断易与 DB/内存不一致；与 {@link RoomService} 加载逻辑对齐。
+     */
     public boolean hasGuest() {
-        return whiteToken != null;
+        lock.lock();
+        try {
+            return whiteUserId != null;
+        } finally {
+            lock.unlock();
+        }
     }
 
     public int[][] getBoardCopy() {
