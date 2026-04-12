@@ -256,6 +256,23 @@ public class RatingSettlementService {
             rawWhite += EloRatingCalculator.upsetBonus(whiteEloBefore, blackEloBefore);
         }
 
+        /** 残局好友房：受邀好友未挑战成功时不扣天梯分（仍计胜负与团团积分等逻辑由既有分支处理） */
+        if (rp.isPuzzleRoom() && rp.getObserverUserId() != null) {
+            Long friendId = puzzleFriendInviteeUserId(rp);
+            if (friendId != null && !OUTCOME_DRAW.equals(outcome)) {
+                boolean friendWon =
+                        (OUTCOME_BLACK_WIN.equals(outcome) && friendId == blackId)
+                                || (OUTCOME_WHITE_WIN.equals(outcome) && friendId == whiteId);
+                if (!friendWon) {
+                    if (friendId == blackId) {
+                        rawBlack = 0;
+                    } else if (friendId == whiteId) {
+                        rawWhite = 0;
+                    }
+                }
+            }
+        }
+
         DailyEloCap.applyNetChange(black, rawBlack);
         DailyEloCap.applyNetChange(white, rawWhite);
 

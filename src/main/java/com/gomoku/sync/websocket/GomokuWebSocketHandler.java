@@ -235,6 +235,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             handleDrawCancel(session, room, color);
         } else if ("CHAT_SEND".equals(type)) {
             handleChatSend(session, room, color, root);
+        } else if ("CLIENT_BOT_MOVE".equals(type)) {
+            handleClientBotMove(session, room, color, root);
         } else {
             sendToSession(session, error("未知消息类型: " + type));
         }
@@ -285,6 +287,61 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             roomGameStateService.forceReloadFromDb(room);
         }
         return true;
+    }
+
+    /**
+     * 残局好友房：轮到人机时由客户端计算落子并通过此消息提交（与每日残局同源 AI），服务端不再调用 {@link
+     * GomokuAiEngine}。
+     */
+    private void handleClientBotMove(WebSocketSession session, GameRoom room, int color, JsonNode root)
+            throws Exception {
+        roomGameStateService.syncRoomFromDbIfBehind(room);
+        if (!room.isPuzzleRoom()) {
+            sendToSession(session, error("仅残局房可提交人机走子"));
+            return;
+        }
+        if (applyOnlineClockTimeouts(room)) {
+            sendToSession(session, error("对局已结束"));
+            broadcastState(room);
+            return;
+        }
+        if (room.isGameOver()) {
+            sendToSession(session, error("对局已结束"));
+            return;
+        }
+        if (room.isUndoPending() || room.isDrawPending()) {
+            sendToSession(session, error("当前不可落子"));
+            return;
+        }
+        int cur = room.getCurrent();
+        boolean turnIsBot =
+                (cur == Stone.BLACK && room.isBlackIsBot()) || (cur == Stone.WHITE && room.isWhiteIsBot());
+        if (!turnIsBot) {
+            sendToSession(session, error("非人机落子回合"));
+            return;
+        }
+        boolean senderIsHuman =
+                (color == Stone.BLACK && !room.isBlackIsBot())
+                        || (color == Stone.WHITE && !room.isWhiteIsBot());
+        if (!senderIsHuman) {
+            sendToSession(session, error("无权提交"));
+            return;
+        }
+        int r = root.path("r").asInt(-1);
+        int c = root.path("c").asInt(-1);
+        String err = room.tryMove(cur, r, c);
+        if (err != null) {
+            sendToSession(session, error(err));
+            return;
+        }
+        if (!roomGameStateService.tryPersist(room)) {
+            roomGameStateService.forceReloadFromDb(room);
+            sendToSession(session, error("对局状态已同步，请重试"));
+            broadcastState(room);
+            return;
+        }
+        broadcastState(room);
+        maybePlayBot(room);
     }
 
     private void handleMove(WebSocketSession session, GameRoom room, int color, JsonNode root) {
@@ -688,6 +745,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
      */
     public void maybePlayBot(GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        /** 残局房（含好友房）人机走子由小程序端 gomoku_ai 提交 {@link #handleClientBotMove} */
+        if (room.isPuzzleRoom()) {
+            return;
+        }
         if (applyOnlineClockTimeouts(room)) {
             broadcastState(room);
             return;
