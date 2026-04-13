@@ -21,10 +21,8 @@ public final class GomokuAiEngine {
     private static final int DEFAULT_SEARCH_DEPTH = 4;
     /** 人机深度全局上限，防止 DB 误配极大值 */
     private static final int ABS_MAX_BOT_SEARCH_DEPTH = 8;
-    /** 根节点候选上限 */
+    /** 根节点与内层候选上限（内层另见 {@link #maxCandForDepth}） */
     private static final int MAX_CANDIDATES_ROOT = 18;
-    /** 更深层的候选上限（减少分支因子） */
-    private static final int MAX_CANDIDATES_DEEP = 12;
     /** 单步思考时间上限（纳秒），超时则叶节点提前返回局面分 */
     private static final long MOVE_TIME_BUDGET_NANOS = 70_000_000L;
     /** 实际搜索深度上限（与 DB 取 min） */
@@ -37,8 +35,10 @@ public final class GomokuAiEngine {
     private static final double ORDER_OPP_BLOCK_WEIGHT = 1.3;
     /** 双威胁对进攻分的倍数（文档规则2） */
     private static final int DOUBLE_THREAT_ATTACK_MULT = 4;
-    /** 强制优先级最高执行到第几层（3–6），与前端 gomoku.js 一致 */
-    private static final int FORCED_TIERS_MAX = 6;
+    /** 强制优先级最高执行到第几层（3–7，7 为防对方双活二），与前端 gomoku.js 一致 */
+    private static final int FORCED_TIERS_MAX = 7;
+    /** 双活二棋型威胁下限（与 gomoku.js shapeThreatScore 一致） */
+    private static final double DOUBLE_LIVE_TWO_SHAPE_BUMP = 220.0;
 
     private static final ThreadLocal<Long> DEADLINE_NANOS = new ThreadLocal<>();
     private static final ThreadLocal<BotAiStyle> AI_STYLE = new ThreadLocal<>();
@@ -203,6 +203,7 @@ public final class GomokuAiEngine {
         double wm = st.getOrderMyW();
         double wo = st.getOrderOppW();
         int opp = opposite(moveForColor);
+        int stoneCount = countStones(board, size);
         cands.sort(
                 Comparator.comparingDouble(
                                 (int[] m) -> {
@@ -213,20 +214,49 @@ public final class GomokuAiEngine {
                                     MoveAnalysis op = analyzeMovePattern(board, size, r, c, opp);
                                     double h = my != null ? shapeThreatScore(my) : 0;
                                     double h2 = op != null ? shapeThreatScore(op) : 0;
-                                    return -(wm * h + wo * (h2 * ORDER_OPP_BLOCK_WEIGHT));
+                                    double core = wm * h + wo * (h2 * ORDER_OPP_BLOCK_WEIGHT);
+                                    core += openingOrderingBonus(board, size, r, c, stoneCount);
+                                    return -core;
                                 })
                         .thenComparingDouble(
                                 m -> -centerTieBreakScore(m[0], m[1], size)));
     }
 
+    /** 与 gomoku.js sortMovesByHeuristic：局面前三手优先贴近已有棋子（切比雪夫距） */
+    private static double openingOrderingBonus(
+            int[][] board, int size, int r, int c, int stoneCount) {
+        if (stoneCount > 2) {
+            return 0;
+        }
+        int d0 = minChebyshevDistToNearestStone(board, size, r, c);
+        if (d0 >= 99) {
+            return 0;
+        }
+        return (6 - d0) * 2.0;
+    }
+
+    private static int minChebyshevDistToNearestStone(int[][] board, int size, int r, int c) {
+        int best = 99;
+        for (int rr = 0; rr < size; rr++) {
+            for (int cc = 0; cc < size; cc++) {
+                if (board[rr][cc] == Stone.EMPTY) {
+                    continue;
+                }
+                int d = Math.max(Math.abs(rr - r), Math.abs(cc - c));
+                if (d < best) {
+                    best = d;
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * 与 gomoku.js minimax 一致：{@code max(12, min(根候选上限, 6 + depth*6))}，避免浅层分支过少漏算。
+     */
     private static int maxCandForDepth(int depthRemaining) {
-        if (depthRemaining >= 3) {
-            return MAX_CANDIDATES_ROOT;
-        }
-        if (depthRemaining >= 2) {
-            return MAX_CANDIDATES_DEEP;
-        }
-        return Math.min(10, MAX_CANDIDATES_DEEP);
+        int cap = Math.min(MAX_CANDIDATES_ROOT, 6 + depthRemaining * 6);
+        return Math.max(12, cap);
     }
 
     private static int minimax(
@@ -244,10 +274,17 @@ public final class GomokuAiEngine {
         if (timeUp()) {
             return evaluateBoard(board, size, aiColor, st);
         }
+        int turn = maximizing ? aiColor : opp;
+        int[] instantWin = findWinningMove(board, size, turn);
+        if (instantWin != null) {
+            if (turn == aiColor) {
+                return 2_000_000 - (rootSearchDepth - depth);
+            }
+            return -2_000_000 + (rootSearchDepth - depth);
+        }
         if (depth == 0) {
             return evaluateBoard(board, size, aiColor, st);
         }
-        int turn = maximizing ? aiColor : opp;
         List<int[]> cands = getCandidates(board, size);
         if (cands.isEmpty()) {
             return evaluateBoard(board, size, aiColor, st);
@@ -496,6 +533,8 @@ public final class GomokuAiEngine {
         boolean independentDoubleRushFour;
         boolean doubleLiveThree;
         boolean liveThreeAndRushFour;
+        /** 落子后至少两个方向为活二（双活二） */
+        boolean doubleLiveTwo;
     }
 
     private static LineRunInfo getLineRunInfo(
@@ -583,6 +622,7 @@ public final class GomokuAiEngine {
         a.independentDoubleRushFour = a.nR4 >= 2 && areIndependentRushFours(board, size, r, c, color);
         a.doubleLiveThree = a.nL3 >= 2;
         a.liveThreeAndRushFour = a.nL3 >= 1 && a.nR4 >= 1;
+        a.doubleLiveTwo = a.nL2 >= 2;
         board[r][c] = Stone.EMPTY;
         return a;
     }
@@ -667,6 +707,10 @@ public final class GomokuAiEngine {
             }
             v = Math.max(v, bump);
             v *= DOUBLE_THREAT_ATTACK_MULT;
+        } else if (a.doubleLiveTwo && a.nL4 < 1) {
+            v = Math.max(v, DOUBLE_LIVE_TWO_SHAPE_BUMP);
+            double dm = Math.min(2.2, 1.0 + (DOUBLE_THREAT_ATTACK_MULT - 1) * 0.35);
+            v *= dm;
         }
         return v;
     }
@@ -784,6 +828,30 @@ public final class GomokuAiEngine {
         }
         if (!tier6.isEmpty()) {
             return pickBestByCenter(tier6, size);
+        }
+        if (FORCED_TIERS_MAX < 7) {
+            return null;
+        }
+        List<int[]> tier7 = new ArrayList<>();
+        for (int r = 0; r < size; r++) {
+            for (int c = 0; c < size; c++) {
+                if (board[r][c] != Stone.EMPTY) {
+                    continue;
+                }
+                MoveAnalysis u = analyzeMovePattern(board, size, r, c, opp);
+                if (u == null || u.nL4 >= 1 || u.independentDoubleRushFour) {
+                    continue;
+                }
+                if (u.doubleLiveThree || u.liveThreeAndRushFour) {
+                    continue;
+                }
+                if (u.doubleLiveTwo) {
+                    tier7.add(new int[] {r, c});
+                }
+            }
+        }
+        if (!tier7.isEmpty()) {
+            return pickBestByCenter(tier7, size);
         }
         return null;
     }

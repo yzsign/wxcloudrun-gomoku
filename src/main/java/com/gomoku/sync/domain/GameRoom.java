@@ -1348,6 +1348,9 @@ public class GameRoom {
     /**
      * 真人好友（执黑或执白）首次连上对应座位 WS 时调用：将棋盘恢复为邀请时残局与下一手。
      *
+     * <p>多实例或冷启动时内存中可能没有 {@link #capturePuzzleFriendBaselineFromRoomState()} 留下的 baseline，此时从
+     * puzzle 模板（与 DB puzzle_init_board_json 一致）恢复。若棋谱已有步数（例如断线重连换实例），则不再重置，避免误清进行中的对局。
+     *
      * @return 是否执行了重置
      */
     public boolean tryApplyPuzzleFriendJoinResetOnce() {
@@ -1356,26 +1359,37 @@ public class GameRoom {
             if (!puzzleRoom) {
                 return false;
             }
-            if (puzzleFriendBaselineBoard == null || puzzleFriendJoinResetDone) {
+            if (puzzleFriendJoinResetDone) {
                 return false;
             }
-            for (int i = 0; i < size; i++) {
-                System.arraycopy(puzzleFriendBaselineBoard[i], 0, board[i], 0, size);
+            if (!hasPuzzleTemplate()) {
+                return false;
             }
-            current = puzzleFriendBaselineCurrent;
-            gameOver = false;
-            winner = null;
-            gameEndReason = null;
-            moveHistory.clear();
-            pendingUndoRequesterColor = null;
-            pendingUndoPops = 0;
-            pendingDrawRequesterColor = null;
-            pendingRematchRequesterColor = null;
-            clockPauseStartedWallMs = 0L;
-            long now = System.currentTimeMillis();
-            clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
-            int stones = countOccupiedStones();
-            clockGameDeadlineWallMs = stones > 0 ? now + CLOCK_GAME_MS : 0L;
+            if (!moveHistory.isEmpty()) {
+                puzzleFriendJoinResetDone = true;
+                return false;
+            }
+            if (puzzleFriendBaselineBoard != null) {
+                for (int i = 0; i < size; i++) {
+                    System.arraycopy(puzzleFriendBaselineBoard[i], 0, board[i], 0, size);
+                }
+                current = puzzleFriendBaselineCurrent;
+                gameOver = false;
+                winner = null;
+                gameEndReason = null;
+                moveHistory.clear();
+                pendingUndoRequesterColor = null;
+                pendingUndoPops = 0;
+                pendingDrawRequesterColor = null;
+                pendingRematchRequesterColor = null;
+                clockPauseStartedWallMs = 0L;
+                long now = System.currentTimeMillis();
+                clockMoveDeadlineWallMs = now + CLOCK_MOVE_MS;
+                int stones = countOccupiedStones();
+                clockGameDeadlineWallMs = stones > 0 ? now + CLOCK_GAME_MS : 0L;
+            } else {
+                restoreLiveStateFromPuzzleTemplate(false);
+            }
             puzzleFriendJoinResetDone = true;
             return true;
         } finally {
