@@ -45,8 +45,8 @@ public class SocialFriendService {
             throw new IllegalArgumentException("用户不存在");
         }
         if (target.isBot()) {
-            /** 与频控相同响应，客户端 Toast 与真人触发限频时一致（§6 不单独暴露原因） */
-            return new CreateFriendResponse("RATE_LIMITED", null);
+            /** 人机不可建立好友：200 + 独立 status，客户端用中性文案（勿与真人 24h 频控混淆） */
+            return new CreateFriendResponse("NOT_SUPPORTED", null);
         }
 
         long low = Math.min(fromUserId, targetUserId);

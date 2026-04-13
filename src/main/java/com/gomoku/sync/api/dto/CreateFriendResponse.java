@@ -5,7 +5,7 @@ package com.gomoku.sync.api.dto;
  */
 public class CreateFriendResponse {
 
-    /** CREATED | PENDING | ALREADY_FRIENDS | RATE_LIMITED */
+    /** CREATED | PENDING | ALREADY_FRIENDS | RATE_LIMITED | NOT_SUPPORTED（目标为人机等不可发起时） */
     private String status;
     private Long friendRequestId;
 
