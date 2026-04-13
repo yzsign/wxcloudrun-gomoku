@@ -530,6 +530,8 @@ public final class GomokuAiEngine {
         int nL3;
         int nS3;
         int nL2;
+        /** 活跳二方向数（O_E_O，与 gomoku.js seg 'j' 一致） */
+        int nJ2;
         boolean doubleRushFour;
         /** 文档规则2：两路冲四且制胜空位不同 */
         boolean independentDoubleRushFour;
@@ -537,8 +539,10 @@ public final class GomokuAiEngine {
         boolean liveThreeAndRushFour;
         /** 落子后至少两个方向为活二（双活二） */
         boolean doubleLiveTwo;
-        /** 活三与活二并存（不同向），如跳二连成活三后另一斜线仍为活二 */
+        /** 活三与活二或活跳二并存 */
         boolean mixedLiveThreeAndTwo;
+        /** 任一向为活跳二（必挡 tier7） */
+        boolean hasJumpLiveTwo;
     }
 
     private static LineRunInfo getLineRunInfo(
@@ -612,6 +616,7 @@ public final class GomokuAiEngine {
             case 'S':
                 return 3;
             case '2':
+            case 'j':
                 return 2;
             default:
                 return 0;
@@ -726,6 +731,32 @@ public final class GomokuAiEngine {
             }
             return 'X';
         }
+        if (len == 5 && nColor == 2 && nEmpty == 3) {
+            int i0 = -1;
+            int i1 = -1;
+            for (int q = 0; q < 5; q++) {
+                int ix = start + q;
+                if (vals[ix] == color) {
+                    if (i0 < 0) {
+                        i0 = ix;
+                    }
+                    i1 = ix;
+                }
+            }
+            if (i0 < 0 || i1 - i0 != 2 || vals[i0 + 1] != Stone.EMPTY) {
+                return null;
+            }
+            if (i0 != centerInLine && i1 != centerInLine) {
+                return null;
+            }
+            if (leftOpen && rightOpen) {
+                return 'j';
+            }
+            if (leftOpen || rightOpen) {
+                return 'j';
+            }
+            return 'X';
+        }
         return null;
     }
 
@@ -810,14 +841,18 @@ public final class GomokuAiEngine {
                 a.nS3++;
             } else if (seg == '2') {
                 a.nL2++;
+            } else if (seg == 'j') {
+                a.nJ2++;
             }
         }
         a.doubleRushFour = a.nR4 >= 2;
         a.independentDoubleRushFour = a.nR4 >= 2 && areIndependentRushFours(board, size, r, c, color);
         a.doubleLiveThree = a.nL3 >= 2;
         a.liveThreeAndRushFour = a.nL3 >= 1 && a.nR4 >= 1;
-        a.doubleLiveTwo = a.nL2 >= 2;
-        a.mixedLiveThreeAndTwo = a.nL3 >= 1 && a.nL2 >= 1;
+        int weakTwo = a.nL2 + a.nJ2;
+        a.doubleLiveTwo = weakTwo >= 2;
+        a.mixedLiveThreeAndTwo = a.nL3 >= 1 && (a.nL2 >= 1 || a.nJ2 >= 1);
+        a.hasJumpLiveTwo = a.nJ2 >= 1;
         board[r][c] = Stone.EMPTY;
         return a;
     }
@@ -891,7 +926,12 @@ public final class GomokuAiEngine {
         if (a.nL4 >= 1) {
             return 10_000;
         }
-        double v = a.nR4 * 1000.0 + a.nL3 * 100.0 + a.nS3 * 25.0 + a.nL2 * 5.0;
+        double v =
+                a.nR4 * 1000.0
+                        + a.nL3 * 100.0
+                        + a.nS3 * 25.0
+                        + a.nL2 * 5.0
+                        + a.nJ2 * 5.0;
         boolean doubleThreat =
                 (a.doubleLiveThree || a.liveThreeAndRushFour || a.mixedLiveThreeAndTwo)
                         && a.nL4 < 1;
@@ -908,6 +948,10 @@ public final class GomokuAiEngine {
         } else if (a.doubleLiveTwo && a.nL4 < 1) {
             v = Math.max(v, DOUBLE_LIVE_TWO_SHAPE_BUMP);
             double dm = Math.min(2.2, 1.0 + (DOUBLE_THREAT_ATTACK_MULT - 1) * 0.35);
+            v *= dm;
+        } else if (a.nJ2 >= 1 && a.nL4 < 1 && !doubleThreat) {
+            v = Math.max(v, 110.0);
+            double dm = Math.min(2.0, 1.0 + (DOUBLE_THREAT_ATTACK_MULT - 1) * 0.28);
             v *= dm;
         }
         return v;
@@ -1043,7 +1087,7 @@ public final class GomokuAiEngine {
                 if (u.doubleLiveThree || u.liveThreeAndRushFour || u.mixedLiveThreeAndTwo) {
                     continue;
                 }
-                if (u.doubleLiveTwo) {
+                if (u.doubleLiveTwo || u.hasJumpLiveTwo) {
                     tier7.add(new int[] {r, c});
                 }
             }
