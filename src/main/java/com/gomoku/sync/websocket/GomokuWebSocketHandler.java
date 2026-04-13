@@ -13,6 +13,7 @@ import com.gomoku.sync.service.RoomChatService;
 import com.gomoku.sync.service.RoomGameStateService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -23,6 +24,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
@@ -75,10 +77,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+    public void afterConnectionEstablished(@NonNull WebSocketSession session) throws Exception {
         URI uri = session.getUri();
         if (uri == null) {
-            session.close(CloseStatus.BAD_DATA);
+            session.close(Objects.requireNonNull(CloseStatus.BAD_DATA));
             return;
         }
         Map<String, List<String>> params = UriComponentsBuilder.fromUri(uri).build().getQueryParams();
@@ -87,25 +89,25 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         String sessionToken = first(params.get("sessionToken"));
         if (roomId == null || token == null) {
             sendError(session, "缺少 roomId 或 token");
-            session.close(CloseStatus.BAD_DATA);
+            session.close(Objects.requireNonNull(CloseStatus.BAD_DATA));
             return;
         }
         if (sessionToken == null || sessionToken.isEmpty()) {
             sendError(session, "缺少 sessionToken");
-            session.close(CloseStatus.BAD_DATA);
+            session.close(Objects.requireNonNull(CloseStatus.BAD_DATA));
             return;
         }
         Optional<Long> userId = sessionJwtService.parseUserId(sessionToken);
         if (!userId.isPresent()) {
             sendError(session, "会话无效或已过期，请重新登录");
-            session.close(CloseStatus.BAD_DATA);
+            session.close(Objects.requireNonNull(CloseStatus.BAD_DATA));
             return;
         }
         session.getAttributes().put(ATTR_USER_ID, userId.get());
         GameRoom room = roomService.getRoom(roomId);
         if (room == null) {
             sendError(session, "房间不存在");
-            session.close(CloseStatus.BAD_DATA);
+            session.close(Objects.requireNonNull(CloseStatus.BAD_DATA));
             return;
         }
 
@@ -121,7 +123,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             synchronized (room) {
                 if (room.getSpectatorSession() != null && room.getSpectatorSession().isOpen()) {
                     sendError(session, "旁观已有连接");
-                    session.close(CloseStatus.NOT_ACCEPTABLE);
+                    session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
                     return;
                 }
                 room.setSpectatorSession(session);
@@ -137,13 +139,13 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         Integer color = room.resolveColorByToken(token);
         if (color == null) {
             sendError(session, "token 无效");
-            session.close(CloseStatus.BAD_DATA);
+            session.close(Objects.requireNonNull(CloseStatus.BAD_DATA));
             return;
         }
         long seatUserId = color == Stone.BLACK ? room.getBlackUserId() : room.getWhiteUserId() == null ? -1L : room.getWhiteUserId();
         if (seatUserId != userId.get()) {
             sendError(session, "用户与座位不匹配");
-            session.close(CloseStatus.BAD_DATA);
+            session.close(Objects.requireNonNull(CloseStatus.BAD_DATA));
             return;
         }
 
@@ -156,14 +158,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             if (color == Stone.BLACK) {
                 if (room.getBlackSession() != null && room.getBlackSession().isOpen()) {
                     sendError(session, "黑方已有连接");
-                    session.close(CloseStatus.NOT_ACCEPTABLE);
+                    session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
                     return;
                 }
                 room.setBlackSession(session);
             } else {
                 if (room.getWhiteSession() != null && room.getWhiteSession().isOpen()) {
                     sendError(session, "白方已有连接");
-                    session.close(CloseStatus.NOT_ACCEPTABLE);
+                    session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
                     return;
                 }
                 room.setWhiteSession(session);
@@ -193,7 +195,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+    protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message)
+            throws Exception {
         if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
             return;
         }
@@ -251,7 +254,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         String json = objectMapper.writeValueAsString(roomChatService.toChatBroadcastJson(row, color));
-        broadcastChat(room, new TextMessage(json));
+        broadcastChat(room, new TextMessage(Objects.requireNonNull(json)));
     }
 
     private long roomSenderUserId(WebSocketSession session) {
@@ -734,9 +737,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         try {
             ObjectNode n = objectMapper.createObjectNode();
             n.put("type", "REMATCH_DECLINED");
-            return new TextMessage(objectMapper.writeValueAsString(n));
+            return new TextMessage(Objects.requireNonNull(objectMapper.writeValueAsString(n)));
         } catch (Exception e) {
-            return new TextMessage("{\"type\":\"REMATCH_DECLINED\"}");
+            return new TextMessage(Objects.requireNonNull("{\"type\":\"REMATCH_DECLINED\"}"));
         }
     }
 
@@ -1067,7 +1070,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+    public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
         if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
             GameRoom room = (GameRoom) session.getAttributes().get(ATTR_ROOM);
             if (room == null) {
@@ -1205,9 +1208,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             } else {
                 n.put("gameEndReason", ger);
             }
-            return new TextMessage(objectMapper.writeValueAsString(n));
+            return new TextMessage(Objects.requireNonNull(objectMapper.writeValueAsString(n)));
         } catch (Exception e) {
-            return new TextMessage("{\"type\":\"ERROR\",\"message\":\"序列化失败\"}");
+            return new TextMessage(Objects.requireNonNull("{\"type\":\"ERROR\",\"message\":\"序列化失败\"}"));
         }
     }
 
@@ -1216,9 +1219,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             ObjectNode n = objectMapper.createObjectNode();
             n.put("type", "ERROR");
             n.put("message", msg);
-            return new TextMessage(objectMapper.writeValueAsString(n));
+            return new TextMessage(Objects.requireNonNull(objectMapper.writeValueAsString(n)));
         } catch (Exception e) {
-            return new TextMessage("{\"type\":\"ERROR\",\"message\":\"错误\"}");
+            return new TextMessage(Objects.requireNonNull("{\"type\":\"ERROR\",\"message\":\"错误\"}"));
         }
     }
 

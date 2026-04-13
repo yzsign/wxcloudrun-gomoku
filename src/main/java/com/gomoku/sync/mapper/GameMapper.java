@@ -15,6 +15,10 @@ public interface GameMapper {
 
     GameRecord selectByRoomIdAndMatchRound(@Param("roomId") String roomId, @Param("matchRound") int matchRound);
 
+    /** 是否存在比指定局次更后的战绩行（用于补报较早局次时防止与更后局次冲突） */
+    int countGamesWithMatchRoundGreaterThan(
+            @Param("roomId") String roomId, @Param("matchRound") int matchRound);
+
     GameRecord selectById(@Param("id") long id);
 
     List<GameHistoryQueryRow> selectHistoryForUser(

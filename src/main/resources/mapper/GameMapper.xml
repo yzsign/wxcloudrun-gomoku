@@ -27,6 +27,10 @@
         WHERE room_id = #{roomId} AND match_round = #{matchRound}
     </select>
 
+    <select id="countGamesWithMatchRoundGreaterThan" resultType="int">
+        SELECT COUNT(*) FROM games WHERE room_id = #{roomId} AND match_round &gt; #{matchRound}
+    </select>
+
     <select id="selectById" resultType="com.gomoku.sync.domain.GameRecord">
         SELECT id, room_id, match_round, black_user_id, white_user_id, total_steps, outcome, runaway_user_id,
                black_elo_before, white_elo_before, black_elo_after, white_elo_after,

@@ -86,8 +86,19 @@ public class RatingSettlementService {
             throw new IllegalArgumentException("matchRound 非法");
         }
         GameRoom live = roomService.getRoom(req.getRoomId());
-        if (live != null && live.getMatchRound() != matchRound) {
-            throw new IllegalArgumentException("局次不匹配");
+        if (live != null) {
+            int liveRound = live.getMatchRound();
+            if (matchRound > liveRound) {
+                throw new IllegalArgumentException("局次不匹配");
+            }
+            /**
+             * 再来一局后内存房间 matchRound 已递增；补报上一局时 matchRound &lt; liveRound。
+             * 若数据库已有更后局次的战绩，则拒绝，避免在已结算更后局次后错误套用较早局次。
+             */
+            if (matchRound < liveRound
+                    && gameMapper.countGamesWithMatchRoundGreaterThan(req.getRoomId(), matchRound) > 0) {
+                throw new IllegalArgumentException("已有更后局次的战绩，无法补报该局");
+            }
         }
 
         GameRecord existingGame =

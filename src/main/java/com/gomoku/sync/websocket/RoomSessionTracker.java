@@ -18,7 +18,7 @@ public class RoomSessionTracker {
         if (roomId == null || roomId.isEmpty()) {
             return;
         }
-        refs.merge(roomId, 1, Integer::sum);
+        refs.merge(roomId, 1, (oldCount, delta) -> oldCount + delta);
     }
 
     public void unregister(String roomId) {
