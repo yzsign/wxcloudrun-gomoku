@@ -45,7 +45,8 @@ public class SocialFriendService {
             throw new IllegalArgumentException("用户不存在");
         }
         if (target.isBot()) {
-            throw new IllegalArgumentException("暂时无法添加该用户为好友");
+            /** 与频控相同响应，客户端 Toast 与真人触发限频时一致（§6 不单独暴露原因） */
+            return new CreateFriendResponse("RATE_LIMITED", null);
         }
 
         long low = Math.min(fromUserId, targetUserId);
