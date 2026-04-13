@@ -95,7 +95,7 @@ public class MatchmakingService {
                 }
                 // ROOM_FULL：移出队列，不删房间
             }
-            GameRoom room = roomService.createRoom(userId);
+            GameRoom room = roomService.createRoom(userId, true);
             waitingRoomIds.addLast(room.getRoomId());
             return new RandomMatchResponse("host", room.getRoomId(), room.getBlackToken(), null, room.getSize(), null);
         }

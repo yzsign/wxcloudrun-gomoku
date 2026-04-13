@@ -20,6 +20,8 @@ public class RoomParticipant {
     private Long observerUserId;
     private String observerToken;
     private boolean puzzleRoom;
+    /** 随机匹配队列创建的房间（POST /api/match/random）；好友房为 false */
+    private boolean randomMatch;
     /** 与 createPuzzleFriendRoom 写入一致，供好友进房时重置盘面 */
     private String puzzleInitBoardJson;
     private Integer puzzleSideToMove;
@@ -126,6 +128,14 @@ public class RoomParticipant {
 
     public void setPuzzleRoom(boolean puzzleRoom) {
         this.puzzleRoom = puzzleRoom;
+    }
+
+    public boolean isRandomMatch() {
+        return randomMatch;
+    }
+
+    public void setRandomMatch(boolean randomMatch) {
+        this.randomMatch = randomMatch;
     }
 
     public String getPuzzleInitBoardJson() {

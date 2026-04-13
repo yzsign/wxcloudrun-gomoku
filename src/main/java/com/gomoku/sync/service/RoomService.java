@@ -43,12 +43,19 @@ public class RoomService {
     }
 
     public GameRoom createRoom(long blackUserId) {
+        return createRoom(blackUserId, false);
+    }
+
+    /**
+     * @param randomMatch true 表示随机匹配队列创建（与 POST /api/rooms 好友房区分）
+     */
+    public GameRoom createRoom(long blackUserId, boolean randomMatch) {
         String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String blackToken = UUID.randomUUID().toString();
         GameRoom room = new GameRoom(roomId, boardSize, blackToken, blackUserId);
         rooms.put(roomId, room);
         try {
-            roomParticipantMapper.insertBlack(roomId, blackUserId, blackToken);
+            roomParticipantMapper.insertBlack(roomId, blackUserId, blackToken, randomMatch);
             roomGameStateService.insertInitial(roomId);
         } catch (Exception e) {
             rooms.remove(roomId);

@@ -8,7 +8,8 @@ public interface RoomParticipantMapper {
     int insertBlack(
             @Param("roomId") String roomId,
             @Param("blackUserId") long blackUserId,
-            @Param("blackToken") String blackToken);
+            @Param("blackToken") String blackToken,
+            @Param("randomMatch") boolean randomMatch);
 
     int insertPuzzleBlack(
             @Param("roomId") String roomId,

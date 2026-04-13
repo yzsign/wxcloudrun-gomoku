@@ -135,6 +135,8 @@ public class RatingSettlementService {
                             existingGame.getWhiteUserId(),
                             existingGid,
                             existingDay);
+            boolean randomExisting =
+                    rpExisting != null && rpExisting.isRandomMatch();
             int bApDelta =
                     puzzleExisting
                             ? pfExisting[0]
@@ -142,7 +144,8 @@ public class RatingSettlementService {
                                     true,
                                     existingGame.getOutcome(),
                                     existingGame.getTotalSteps(),
-                                    ran);
+                                    ran,
+                                    randomExisting);
             int wApDelta =
                     puzzleExisting
                             ? pfExisting[1]
@@ -150,7 +153,8 @@ public class RatingSettlementService {
                                     false,
                                     existingGame.getOutcome(),
                                     existingGame.getTotalSteps(),
-                                    ran);
+                                    ran,
+                                    randomExisting);
             return new SettleGameResponse(
                     existingId,
                     existingGame.getBlackEloAfter(),
@@ -310,6 +314,7 @@ public class RatingSettlementService {
                 runawayUid,
                 steps,
                 rp.isPuzzleRoom(),
+                rp.isRandomMatch(),
                 pfNew[0],
                 pfNew[1]);
 
@@ -340,14 +345,15 @@ public class RatingSettlementService {
         insertLog(whiteId, blackId, req.getRoomId(), whiteEloBefore, whiteEloAfter, whiteDeltaAct, steps, runaway && Objects.equals(runawayUid, whiteId));
 
         boolean puzzleRoom = rp.isPuzzleRoom();
+        boolean randomMatchRoom = rp.isRandomMatch();
         int bApDelta =
                 puzzleRoom
                         ? pfNew[0]
-                        : activityPointsDeltaForSide(true, outcome, steps, runaway);
+                        : activityPointsDeltaForSide(true, outcome, steps, runaway, randomMatchRoom);
         int wApDelta =
                 puzzleRoom
                         ? pfNew[1]
-                        : activityPointsDeltaForSide(false, outcome, steps, runaway);
+                        : activityPointsDeltaForSide(false, outcome, steps, runaway, randomMatchRoom);
         return new SettleGameResponse(
                 gameId,
                 blackEloAfter,
@@ -361,11 +367,28 @@ public class RatingSettlementService {
     }
 
     /**
-     * 本局团团积分增量（与 {@link #applyStatsAfterGame} 一致）：有效局 ≥15 手且非逃跑时双方 +10，胜方额外 +5。
+     * 本局团团积分增量（与 {@link #applyStatsAfterGame} 一致）：
+     * 有效局 ≥15 手且非逃跑时——随机匹配：胜 +10、负 +5，和棋双方 +10；好友房等非随机：双方 +10、胜方额外 +5。
      */
     static int activityPointsDeltaForSide(
-            boolean forBlack, String outcome, int steps, boolean runaway) {
+            boolean forBlack,
+            String outcome,
+            int steps,
+            boolean runaway,
+            boolean randomMatchRoom) {
         if (steps < 15 || runaway) {
+            return 0;
+        }
+        if (randomMatchRoom) {
+            if (OUTCOME_DRAW.equals(outcome)) {
+                return 10;
+            }
+            if (OUTCOME_BLACK_WIN.equals(outcome)) {
+                return forBlack ? 10 : 5;
+            }
+            if (OUTCOME_WHITE_WIN.equals(outcome)) {
+                return forBlack ? 5 : 10;
+            }
             return 0;
         }
         int n = 10;
@@ -424,6 +447,7 @@ public class RatingSettlementService {
             Long runawayUid,
             int steps,
             boolean puzzleRoom,
+            boolean randomMatchRoom,
             int puzzleFriendExtraBlack,
             int puzzleFriendExtraWhite) {
 
@@ -470,11 +494,11 @@ public class RatingSettlementService {
         int bAp =
                 puzzleRoom
                         ? puzzleFriendExtraBlack
-                        : activityPointsDeltaForSide(true, outcome, steps, runaway);
+                        : activityPointsDeltaForSide(true, outcome, steps, runaway, randomMatchRoom);
         int wAp =
                 puzzleRoom
                         ? puzzleFriendExtraWhite
-                        : activityPointsDeltaForSide(false, outcome, steps, runaway);
+                        : activityPointsDeltaForSide(false, outcome, steps, runaway, randomMatchRoom);
         if (bAp > 0) {
             black.setActivityPoints(black.getActivityPoints() + bAp);
         }

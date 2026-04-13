@@ -17,13 +17,14 @@
         <result property="observerUserId" column="observer_user_id"/>
         <result property="observerToken" column="observer_token"/>
         <result property="puzzleRoom" column="puzzle_room"/>
+        <result property="randomMatch" column="random_match"/>
         <result property="puzzleInitBoardJson" column="puzzle_init_board_json"/>
         <result property="puzzleSideToMove" column="puzzle_side_to_move"/>
     </resultMap>
 
     <insert id="insertBlack">
-        INSERT INTO room_participants (room_id, black_user_id, black_token)
-        VALUES (#{roomId}, #{blackUserId}, #{blackToken})
+        INSERT INTO room_participants (room_id, black_user_id, black_token, random_match)
+        VALUES (#{roomId}, #{blackUserId}, #{blackToken}, #{randomMatch})
     </insert>
 
     <insert id="insertPuzzleBlack">
@@ -88,7 +89,7 @@
     <select id="selectByRoomId" resultMap="RoomParticipantResult">
         SELECT room_id, black_user_id, black_token, white_user_id, white_token,
                white_is_bot, black_is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style,
-               observer_user_id, observer_token, puzzle_room, puzzle_init_board_json, puzzle_side_to_move
+               observer_user_id, observer_token, puzzle_room, random_match, puzzle_init_board_json, puzzle_side_to_move
         FROM room_participants
         WHERE room_id = #{roomId}
         LIMIT 1
