@@ -44,10 +44,6 @@ public class SocialFriendService {
         if (target == null) {
             throw new IllegalArgumentException("用户不存在");
         }
-        if (target.isBot()) {
-            /** 人机不可建立好友：200 + 独立 status，客户端用中性文案（勿与真人 24h 频控混淆） */
-            return new CreateFriendResponse("NOT_SUPPORTED", null);
-        }
 
         long low = Math.min(fromUserId, targetUserId);
         long high = Math.max(fromUserId, targetUserId);
@@ -81,7 +77,9 @@ public class SocialFriendService {
 
         User from = userMapper.selectById(fromUserId);
         String nick = from != null && from.getNickname() != null ? from.getNickname() : "";
-        pushService.friendRequestIncoming(targetUserId, row.getId(), fromUserId, nick);
+        if (!target.isBot()) {
+            pushService.friendRequestIncoming(targetUserId, row.getId(), fromUserId, nick);
+        }
 
         return new CreateFriendResponse("CREATED", row.getId());
     }
