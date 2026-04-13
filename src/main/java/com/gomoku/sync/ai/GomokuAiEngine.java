@@ -39,6 +39,8 @@ public final class GomokuAiEngine {
     private static final int FORCED_TIERS_MAX = 7;
     /** 双活二棋型威胁下限（与 gomoku.js shapeThreatScore 一致） */
     private static final double DOUBLE_LIVE_TWO_SHAPE_BUMP = 220.0;
+    /** 活三+活二混合叉（与 gomoku.js bump 720 一致） */
+    private static final double MIXED_L3_L2_BUMP = 720.0;
 
     private static final ThreadLocal<Long> DEADLINE_NANOS = new ThreadLocal<>();
     private static final ThreadLocal<BotAiStyle> AI_STYLE = new ThreadLocal<>();
@@ -535,6 +537,8 @@ public final class GomokuAiEngine {
         boolean liveThreeAndRushFour;
         /** 落子后至少两个方向为活二（双活二） */
         boolean doubleLiveTwo;
+        /** 活三与活二并存（不同向），如跳二连成活三后另一斜线仍为活二 */
+        boolean mixedLiveThreeAndTwo;
     }
 
     private static LineRunInfo getLineRunInfo(
@@ -595,6 +599,197 @@ public final class GomokuAiEngine {
         return 'N';
     }
 
+    private static int segmentRank(char s) {
+        switch (s) {
+            case 'W':
+                return 7;
+            case '4':
+                return 6;
+            case 'R':
+                return 5;
+            case '3':
+                return 4;
+            case 'S':
+                return 3;
+            case '2':
+                return 2;
+            default:
+                return 0;
+        }
+    }
+
+    private static char strongerSegment(char a, char b) {
+        return segmentRank(a) >= segmentRank(b) ? a : b;
+    }
+
+    /** 与 gomoku.js lineWindow：以 (r,c) 为中心的线段值（越界为 -1） */
+    private static int[] lineWindowVals(int[][] board, int size, int r, int c, int dr, int dc, int half) {
+        int len = half * 2 + 1;
+        int[] vals = new int[len];
+        for (int k = -half; k <= half; k++) {
+            int rr = r + k * dr;
+            int cc = c + k * dc;
+            vals[k + half] =
+                    (rr >= 0 && rr < size && cc >= 0 && cc < size) ? board[rr][cc] : -1;
+        }
+        return vals;
+    }
+
+    /**
+     * 滑动 5/6 格窗口识别跳三、跳四（与 gomoku.js jumpWindowThreat 一致）。
+     */
+    private static Character jumpWindowThreat(
+            int[] vals, int start, int len, int centerInLine, int color) {
+        int opp = opposite(color);
+        int nColor = 0;
+        int nEmpty = 0;
+        boolean usesCenter = false;
+        for (int i = 0; i < len; i++) {
+            int idx = start + i;
+            int v = vals[idx];
+            if (v == opp || v == -1) {
+                return null;
+            }
+            if (idx == centerInLine) {
+                usesCenter = true;
+            }
+            if (v == color) {
+                nColor++;
+            } else if (v == Stone.EMPTY) {
+                nEmpty++;
+            }
+        }
+        if (!usesCenter) {
+            return null;
+        }
+        int leftE = start > 0 ? vals[start - 1] : -1;
+        int rightE = start + len < vals.length ? vals[start + len] : -1;
+        boolean leftOpen = leftE == Stone.EMPTY;
+        boolean rightOpen = rightE == Stone.EMPTY;
+
+        if (len == 5 && nColor == 4 && nEmpty == 1) {
+            if (leftOpen && rightOpen) {
+                return '4';
+            }
+            if (leftOpen || rightOpen) {
+                return 'R';
+            }
+            return 'X';
+        }
+        if (len == 6 && nColor == 4 && nEmpty == 2) {
+            int first = -1;
+            int last = -1;
+            for (int j = 0; j < 6; j++) {
+                int sj = vals[start + j];
+                if (sj == color) {
+                    if (first < 0) {
+                        first = j;
+                    }
+                    last = j;
+                }
+            }
+            if (first < 0 || last - first > 5) {
+                return null;
+            }
+            int innerEmpty = 0;
+            for (int j = first; j <= last; j++) {
+                if (vals[start + j] == Stone.EMPTY) {
+                    innerEmpty++;
+                }
+            }
+            if (innerEmpty != 2) {
+                return null;
+            }
+            if (leftOpen && rightOpen) {
+                return '4';
+            }
+            if (leftOpen || rightOpen) {
+                return 'R';
+            }
+            return 'X';
+        }
+        if (len == 5 && nColor == 3 && nEmpty == 2) {
+            if (leftOpen && rightOpen) {
+                return '3';
+            }
+            if (leftOpen || rightOpen) {
+                return 'S';
+            }
+            return 'X';
+        }
+        if (len == 6 && nColor == 3 && nEmpty == 3) {
+            if (leftOpen && rightOpen) {
+                return '3';
+            }
+            if (leftOpen || rightOpen) {
+                return 'S';
+            }
+            return 'X';
+        }
+        return null;
+    }
+
+    private static Character jumpAwareSegment(
+            int[][] board, int size, int r, int c, int dr, int dc, int color) {
+        int half = 7;
+        int[] vals = lineWindowVals(board, size, r, c, dr, dc, half);
+        int cidx = half;
+        Character best = null;
+        for (int wlen = 5; wlen <= 6; wlen++) {
+            for (int s = 0; s + wlen <= vals.length; s++) {
+                if (cidx < s || cidx >= s + wlen) {
+                    continue;
+                }
+                Character t = jumpWindowThreat(vals, s, wlen, cidx, color);
+                if (t == null) {
+                    continue;
+                }
+                if (best == null || segmentRank(t) > segmentRank(best)) {
+                    best = t;
+                }
+            }
+        }
+        return best;
+    }
+
+    private static char directionSegmentMerged(
+            int[][] board, int size, int r, int c, int dr, int dc, int color) {
+        LineRunInfo info = getLineRunInfo(board, size, r, c, dr, dc, color);
+        char base = classifySegment(info.len, info.leftOpen, info.rightOpen);
+        Character jmp = jumpAwareSegment(board, size, r, c, dr, dc, color);
+        if (jmp == null) {
+            return base;
+        }
+        return strongerSegment(base, jmp);
+    }
+
+    /** 沿该线任一空位落子即五连的制胜点（含跳四；与 gomoku.js rushWinningCellAlongLine 一致） */
+    private static int[] rushWinningCellAlongLine(
+            int[][] board, int size, int r, int c, int dr, int dc, int color) {
+        int[] w = rushFourWinningCell(board, size, r, c, dr, dc, color);
+        if (w != null) {
+            return w;
+        }
+        for (int k = -7; k <= 7; k++) {
+            int rr = r + k * dr;
+            int cc = c + k * dc;
+            if (rr < 0
+                    || rr >= size
+                    || cc < 0
+                    || cc >= size
+                    || board[rr][cc] != Stone.EMPTY) {
+                continue;
+            }
+            board[rr][cc] = color;
+            boolean win = WinChecker.checkWin(board, size, rr, cc, color);
+            board[rr][cc] = Stone.EMPTY;
+            if (win) {
+                return new int[] {rr, cc};
+            }
+        }
+        return null;
+    }
+
     private static MoveAnalysis analyzeMovePattern(
             int[][] board, int size, int r, int c, int color) {
         if (r < 0 || r >= size || c < 0 || c >= size || board[r][c] != Stone.EMPTY) {
@@ -604,8 +799,7 @@ public final class GomokuAiEngine {
         MoveAnalysis a = new MoveAnalysis();
         a.hasWin = WinChecker.checkWin(board, size, r, c, color);
         for (int[] dir : DIRS) {
-            LineRunInfo info = getLineRunInfo(board, size, r, c, dir[0], dir[1], color);
-            char seg = classifySegment(info.len, info.leftOpen, info.rightOpen);
+            char seg = directionSegmentMerged(board, size, r, c, dir[0], dir[1], color);
             if (seg == '4') {
                 a.nL4++;
             } else if (seg == 'R') {
@@ -623,6 +817,7 @@ public final class GomokuAiEngine {
         a.doubleLiveThree = a.nL3 >= 2;
         a.liveThreeAndRushFour = a.nL3 >= 1 && a.nR4 >= 1;
         a.doubleLiveTwo = a.nL2 >= 2;
+        a.mixedLiveThreeAndTwo = a.nL3 >= 1 && a.nL2 >= 1;
         board[r][c] = Stone.EMPTY;
         return a;
     }
@@ -671,11 +866,10 @@ public final class GomokuAiEngine {
             int[][] board, int size, int r, int c, int color) {
         Set<String> keys = new HashSet<>();
         for (int[] dir : DIRS) {
-            LineRunInfo info = getLineRunInfo(board, size, r, c, dir[0], dir[1], color);
-            if (classifySegment(info.len, info.leftOpen, info.rightOpen) != 'R') {
+            if (directionSegmentMerged(board, size, r, c, dir[0], dir[1], color) != 'R') {
                 continue;
             }
-            int[] w = rushFourWinningCell(board, size, r, c, dir[0], dir[1], color);
+            int[] w = rushWinningCellAlongLine(board, size, r, c, dir[0], dir[1], color);
             if (w == null) {
                 continue;
             }
@@ -699,11 +893,15 @@ public final class GomokuAiEngine {
         }
         double v = a.nR4 * 1000.0 + a.nL3 * 100.0 + a.nS3 * 25.0 + a.nL2 * 5.0;
         boolean doubleThreat =
-                (a.doubleLiveThree || a.liveThreeAndRushFour) && a.nL4 < 1;
+                (a.doubleLiveThree || a.liveThreeAndRushFour || a.mixedLiveThreeAndTwo)
+                        && a.nL4 < 1;
         if (doubleThreat) {
             double bump = a.liveThreeAndRushFour ? 1500.0 : 500.0;
             if (a.doubleLiveThree && a.liveThreeAndRushFour) {
                 bump = 1500.0;
+            }
+            if (a.mixedLiveThreeAndTwo && !a.liveThreeAndRushFour && !a.doubleLiveThree) {
+                bump = Math.max(bump, MIXED_L3_L2_BUMP);
             }
             v = Math.max(v, bump);
             v *= DOUBLE_THREAT_ATTACK_MULT;
@@ -800,7 +998,7 @@ public final class GomokuAiEngine {
                 if (s.nL4 >= 1 || s.independentDoubleRushFour) {
                     continue;
                 }
-                if (s.doubleLiveThree || s.liveThreeAndRushFour) {
+                if (s.doubleLiveThree || s.liveThreeAndRushFour || s.mixedLiveThreeAndTwo) {
                     tier5.add(new int[] {r, c});
                 }
             }
@@ -821,7 +1019,7 @@ public final class GomokuAiEngine {
                 if (t == null || t.nL4 >= 1 || t.independentDoubleRushFour) {
                     continue;
                 }
-                if (t.doubleLiveThree || t.liveThreeAndRushFour) {
+                if (t.doubleLiveThree || t.liveThreeAndRushFour || t.mixedLiveThreeAndTwo) {
                     tier6.add(new int[] {r, c});
                 }
             }
@@ -842,7 +1040,7 @@ public final class GomokuAiEngine {
                 if (u == null || u.nL4 >= 1 || u.independentDoubleRushFour) {
                     continue;
                 }
-                if (u.doubleLiveThree || u.liveThreeAndRushFour) {
+                if (u.doubleLiveThree || u.liveThreeAndRushFour || u.mixedLiveThreeAndTwo) {
                     continue;
                 }
                 if (u.doubleLiveTwo) {
