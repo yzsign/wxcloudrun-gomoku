@@ -45,7 +45,7 @@ public class SocialFriendService {
             throw new IllegalArgumentException("用户不存在");
         }
         if (target.isBot()) {
-            throw new IllegalArgumentException("无法向人机账号发起好友申请");
+            throw new IllegalArgumentException("暂时无法添加该用户为好友");
         }
 
         long low = Math.min(fromUserId, targetUserId);
