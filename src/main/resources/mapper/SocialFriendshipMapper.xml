@@ -12,4 +12,28 @@
         SELECT COUNT(1) FROM social_friendship
         WHERE user_low_id = #{userLowId} AND user_high_id = #{userHighId}
     </select>
+
+    <delete id="deletePair">
+        DELETE FROM social_friendship
+        WHERE user_low_id = #{userLowId} AND user_high_id = #{userHighId}
+    </delete>
+
+    <select id="listFriendsForUser" resultType="com.gomoku.sync.api.dto.FriendListItemDto">
+        SELECT
+            u.id AS peerUserId,
+            u.nickname AS nickname,
+            u.avatar_url AS avatarUrl,
+            u.gender AS gender,
+            COALESCE(r.remark, '') AS remark
+        FROM social_friendship f
+        INNER JOIN users u ON u.id = CASE
+            WHEN f.user_low_id = #{userId} THEN f.user_high_id
+            ELSE f.user_low_id
+        END
+        LEFT JOIN social_friend_remark r
+            ON r.owner_user_id = #{userId} AND r.peer_user_id = u.id
+        WHERE f.user_low_id = #{userId} OR f.user_high_id = #{userId}
+        ORDER BY f.created_at DESC
+        LIMIT #{limit}
+    </select>
 </mapper>

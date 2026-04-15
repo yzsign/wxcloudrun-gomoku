@@ -1,37 +1,50 @@
 package com.gomoku.sync.service;
 
 import com.gomoku.sync.api.dto.CreateFriendResponse;
+import com.gomoku.sync.api.dto.FriendListItemDto;
 import com.gomoku.sync.api.dto.FriendRequestActionResponse;
 import com.gomoku.sync.api.dto.FriendStatusResponse;
 import com.gomoku.sync.domain.SocialFriendRequest;
 import com.gomoku.sync.domain.User;
+import com.gomoku.sync.mapper.SocialFriendRemarkMapper;
 import com.gomoku.sync.mapper.SocialFriendRequestMapper;
 import com.gomoku.sync.mapper.SocialFriendshipMapper;
 import com.gomoku.sync.mapper.UserMapper;
+import com.gomoku.sync.websocket.UserWebSocketRegistry;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.socket.WebSocketSession;
 
 import java.util.Date;
+import java.util.List;
 
 @Service
 public class SocialFriendService {
 
     private static final int RATE_LIMIT_PER_24H = 3;
+    private static final int FRIEND_LIST_MAX = 50;
+    private static final int REMARK_MAX_LEN = 64;
 
     private final UserMapper userMapper;
     private final SocialFriendshipMapper friendshipMapper;
     private final SocialFriendRequestMapper requestMapper;
+    private final SocialFriendRemarkMapper friendRemarkMapper;
+    private final UserWebSocketRegistry userWebSocketRegistry;
     private final UserWebSocketPushService pushService;
 
     public SocialFriendService(
             UserMapper userMapper,
             SocialFriendshipMapper friendshipMapper,
             SocialFriendRequestMapper requestMapper,
+            SocialFriendRemarkMapper friendRemarkMapper,
+            UserWebSocketRegistry userWebSocketRegistry,
             UserWebSocketPushService pushService) {
         this.userMapper = userMapper;
         this.friendshipMapper = friendshipMapper;
         this.requestMapper = requestMapper;
+        this.friendRemarkMapper = friendRemarkMapper;
+        this.userWebSocketRegistry = userWebSocketRegistry;
         this.pushService = pushService;
     }
 
@@ -220,5 +233,54 @@ public class SocialFriendService {
             return r;
         }
         return ensureFreshPending(r);
+    }
+
+    public List<FriendListItemDto> listFriends(long viewerUserId) {
+        List<FriendListItemDto> rows = friendshipMapper.listFriendsForUser(viewerUserId, FRIEND_LIST_MAX);
+        for (FriendListItemDto row : rows) {
+            boolean online = userWebSocketRegistry
+                    .getSession(row.getPeerUserId())
+                    .map(WebSocketSession::isOpen)
+                    .orElse(false);
+            row.setOnline(online);
+            String nick = row.getNickname() != null ? row.getNickname() : "";
+            String rem = row.getRemark() != null ? row.getRemark().trim() : "";
+            row.setDisplayName(rem.isEmpty() ? nick : rem);
+        }
+        return rows;
+    }
+
+    @Transactional
+    public void unfriend(long actorUserId, long peerUserId) {
+        if (actorUserId == peerUserId) {
+            throw new IllegalArgumentException("参数非法");
+        }
+        long low = Math.min(actorUserId, peerUserId);
+        long high = Math.max(actorUserId, peerUserId);
+        int n = friendshipMapper.deletePair(low, high);
+        if (n <= 0) {
+            throw new IllegalArgumentException("不是好友");
+        }
+        friendRemarkMapper.deleteForPair(actorUserId, peerUserId);
+        friendRemarkMapper.deleteForPair(peerUserId, actorUserId);
+        pushService.friendshipUpdated(actorUserId, peerUserId, false);
+        pushService.friendshipUpdated(peerUserId, actorUserId, false);
+    }
+
+    @Transactional
+    public void setRemark(long actorUserId, long peerUserId, String remarkRaw) {
+        if (actorUserId == peerUserId) {
+            throw new IllegalArgumentException("参数非法");
+        }
+        String remark = remarkRaw != null ? remarkRaw.trim() : "";
+        if (remark.length() > REMARK_MAX_LEN) {
+            throw new IllegalArgumentException("备注最长 " + REMARK_MAX_LEN + " 字");
+        }
+        long low = Math.min(actorUserId, peerUserId);
+        long high = Math.max(actorUserId, peerUserId);
+        if (friendshipMapper.existsPair(low, high) <= 0) {
+            throw new IllegalArgumentException("不是好友");
+        }
+        friendRemarkMapper.upsertRemark(actorUserId, peerUserId, remark);
     }
 }

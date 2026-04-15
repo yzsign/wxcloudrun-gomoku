@@ -5,11 +5,15 @@ import com.gomoku.sync.api.dto.CreateFriendRequestBody;
 import com.gomoku.sync.api.dto.CreateFriendResponse;
 import com.gomoku.sync.api.dto.FriendRequestActionResponse;
 import com.gomoku.sync.api.dto.FriendStatusResponse;
+import com.gomoku.sync.api.dto.FriendsListResponse;
+import com.gomoku.sync.api.dto.UpdateFriendRemarkBody;
 import com.gomoku.sync.service.SessionJwtService;
 import com.gomoku.sync.service.SocialFriendService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -113,5 +117,59 @@ public class SocialFriendController {
         }
         FriendStatusResponse res = socialFriendService.getFriendStatus(uid.get(), userId);
         return ResponseEntity.ok(res);
+    }
+
+    @GetMapping("/friends")
+    public ResponseEntity<?> listFriends(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        return ResponseEntity.ok(new FriendsListResponse(socialFriendService.listFriends(uid.get())));
+    }
+
+    @DeleteMapping("/friends/{peerUserId}")
+    public ResponseEntity<?> unfriend(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("peerUserId") long peerUserId) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        if (peerUserId <= 0) {
+            return ResponseEntity.badRequest()
+                    .body(new ApiError("BAD_REQUEST", "非法 peerUserId"));
+        }
+        try {
+            socialFriendService.unfriend(uid.get(), peerUserId);
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
+        }
+    }
+
+    @PatchMapping("/friends/{peerUserId}/remark")
+    public ResponseEntity<?> patchRemark(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("peerUserId") long peerUserId,
+            @RequestBody(required = false) UpdateFriendRemarkBody body) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        if (peerUserId <= 0) {
+            return ResponseEntity.badRequest()
+                    .body(new ApiError("BAD_REQUEST", "非法 peerUserId"));
+        }
+        try {
+            socialFriendService.setRemark(uid.get(), peerUserId, body != null ? body.getRemark() : "");
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
+        }
     }
 }

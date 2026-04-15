@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.SocialFriendRemarkMapper">
+
+    <insert id="upsertRemark">
+        INSERT INTO social_friend_remark (owner_user_id, peer_user_id, remark)
+        VALUES (#{ownerUserId}, #{peerUserId}, #{remark})
+        ON DUPLICATE KEY UPDATE remark = VALUES(remark)
+    </insert>
+
+    <delete id="deleteForPair">
+        DELETE FROM social_friend_remark
+        WHERE owner_user_id = #{ownerUserId} AND peer_user_id = #{peerUserId}
+    </delete>
+</mapper>
