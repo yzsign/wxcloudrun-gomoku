@@ -22,11 +22,11 @@ public final class GomokuAiEngine {
     /** 人机深度全局上限，防止 DB 误配极大值 */
     private static final int ABS_MAX_BOT_SEARCH_DEPTH = 8;
     /** 根节点与内层候选上限（内层另见 {@link #maxCandForDepth}） */
-    private static final int MAX_CANDIDATES_ROOT = 18;
+    private static final int MAX_CANDIDATES_ROOT = 24;
     /** 单步思考时间上限（纳秒），超时则叶节点提前返回局面分 */
-    private static final long MOVE_TIME_BUDGET_NANOS = 70_000_000L;
-    /** 实际搜索深度上限（与 DB 取 min） */
-    private static final int EFFECTIVE_DEPTH_CAP = 6;
+    private static final long MOVE_TIME_BUDGET_NANOS = 220_000_000L;
+    /** 实际搜索深度上限（与 DB 取 min）；与 {@link #ABS_MAX_BOT_SEARCH_DEPTH} 一致，否则 users.bot_search_depth_* 高配无效 */
+    private static final int EFFECTIVE_DEPTH_CAP = 8;
     /** 对手威胁权重（文档规则3），与 gomoku.js OPP_LINE_PATTERN_MULT 一致 */
     private static final double OPP_LINE_PATTERN_MULT = 1.3;
     /**
