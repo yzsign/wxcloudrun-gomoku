@@ -9,6 +9,8 @@ import com.gomoku.sync.domain.RoomChatMessage;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
+import com.gomoku.sync.util.ChatAbusiveTextFilter;
+import com.gomoku.sync.util.ChatSensitiveInfoFilter;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -87,10 +89,15 @@ public class RoomChatService {
 
     private final RoomParticipantMapper roomParticipantMapper;
     private final ObjectMapper objectMapper;
+    private final WeChatMsgSecCheckService weChatMsgSecCheckService;
 
-    public RoomChatService(RoomParticipantMapper roomParticipantMapper, ObjectMapper objectMapper) {
+    public RoomChatService(
+            RoomParticipantMapper roomParticipantMapper,
+            ObjectMapper objectMapper,
+            WeChatMsgSecCheckService weChatMsgSecCheckService) {
         this.roomParticipantMapper = roomParticipantMapper;
         this.objectMapper = objectMapper;
+        this.weChatMsgSecCheckService = weChatMsgSecCheckService;
     }
 
     public Optional<String> tryReport(
@@ -145,6 +152,14 @@ public class RoomChatService {
             }
             if (codePointCount(content) > MAX_TEXT_CODEPOINTS) {
                 return Optional.of("最多30字");
+            }
+            content =
+                    ChatAbusiveTextFilter.maskAbusiveText(
+                            ChatSensitiveInfoFilter.maskSensitiveInfo(content));
+            Optional<String> wxRisk =
+                    weChatMsgSecCheckService.rejectIfWeChatRisky(senderUserId, content);
+            if (wxRisk.isPresent()) {
+                return wxRisk;
             }
         } else if (KIND_QUICK.equals(kind)) {
             content = root.path("text").asText("");
