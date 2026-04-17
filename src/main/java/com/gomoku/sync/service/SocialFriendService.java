@@ -25,6 +25,7 @@ public class SocialFriendService {
     private static final int RATE_LIMIT_PER_24H = 3;
     private static final int FRIEND_LIST_MAX = 50;
     private static final int REMARK_MAX_LEN = 64;
+    private static final int FRIEND_DM_MAX_LEN = 300;
 
     private final UserMapper userMapper;
     private final SocialFriendshipMapper friendshipMapper;
@@ -282,5 +283,30 @@ public class SocialFriendService {
             throw new IllegalArgumentException("不是好友");
         }
         friendRemarkMapper.upsertRemark(actorUserId, peerUserId, remark);
+    }
+
+    /**
+     * 向好友发送一条私聊消息（经用户 WS 实时送达；不落库）。
+     */
+    public void sendFriendDirectMessage(long fromUserId, long peerUserId, String textRaw) {
+        if (fromUserId == peerUserId) {
+            throw new IllegalArgumentException("参数非法");
+        }
+        String text = textRaw != null ? textRaw.trim() : "";
+        if (text.isEmpty()) {
+            throw new IllegalArgumentException("消息不能为空");
+        }
+        if (text.length() > FRIEND_DM_MAX_LEN) {
+            throw new IllegalArgumentException("消息最长 " + FRIEND_DM_MAX_LEN + " 字");
+        }
+        long low = Math.min(fromUserId, peerUserId);
+        long high = Math.max(fromUserId, peerUserId);
+        if (friendshipMapper.existsPair(low, high) <= 0) {
+            throw new IllegalArgumentException("不是好友");
+        }
+        User from = userMapper.selectById(fromUserId);
+        String nick = from != null && from.getNickname() != null ? from.getNickname() : "";
+        long sentAt = System.currentTimeMillis();
+        pushService.friendDirectMessageIncoming(peerUserId, fromUserId, nick, text, sentAt);
     }
 }

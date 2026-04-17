@@ -6,6 +6,7 @@ import com.gomoku.sync.api.dto.CreateFriendResponse;
 import com.gomoku.sync.api.dto.FriendRequestActionResponse;
 import com.gomoku.sync.api.dto.FriendStatusResponse;
 import com.gomoku.sync.api.dto.FriendsListResponse;
+import com.gomoku.sync.api.dto.SendFriendMessageBody;
 import com.gomoku.sync.api.dto.UpdateFriendRemarkBody;
 import com.gomoku.sync.service.SessionJwtService;
 import com.gomoku.sync.service.SocialFriendService;
@@ -167,6 +168,27 @@ public class SocialFriendController {
         }
         try {
             socialFriendService.setRemark(uid.get(), peerUserId, body != null ? body.getRemark() : "");
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/friend-messages")
+    public ResponseEntity<?> sendFriendMessage(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) SendFriendMessageBody body) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        if (body == null || body.getPeerUserId() == null || body.getPeerUserId() <= 0) {
+            return ResponseEntity.badRequest()
+                    .body(new ApiError("BAD_REQUEST", "缺少或非法 peerUserId"));
+        }
+        try {
+            socialFriendService.sendFriendDirectMessage(uid.get(), body.getPeerUserId(), body.getText());
             return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));

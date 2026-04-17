@@ -78,4 +78,18 @@ public class UserWebSocketPushService {
         root.set("payload", payload);
         sendToUser(userId, root);
     }
+
+    /** 好友私聊（非局内频道）：仅实时推送，不做历史存储 */
+    public void friendDirectMessageIncoming(
+            long toUserId, long fromUserId, String fromNickname, String text, long sentAtMillis) {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("fromUserId", fromUserId);
+        payload.put("fromNickname", fromNickname != null ? fromNickname : "");
+        payload.put("text", text != null ? text : "");
+        payload.put("sentAt", sentAtMillis);
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("type", "FRIEND_DM_INCOMING");
+        root.set("payload", payload);
+        sendToUser(toUserId, root);
+    }
 }
