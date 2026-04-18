@@ -88,7 +88,6 @@ public class UserRatingResponse {
                 null,
                 null,
                 null,
-                null,
                 null);
     }
 
