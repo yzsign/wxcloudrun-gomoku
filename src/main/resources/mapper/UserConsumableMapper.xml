@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.UserConsumableMapper">
+
+    <resultMap id="UserConsumableResult" type="com.gomoku.sync.domain.UserConsumable">
+        <id property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="kind" column="kind"/>
+        <result property="quantity" column="quantity"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="selectByUserIdAndKindForUpdate" resultMap="UserConsumableResult">
+        SELECT id, user_id, kind, quantity, created_at, updated_at
+        FROM user_consumables
+        WHERE user_id = #{userId}
+          AND kind = #{kind}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+    <select id="selectQuantityByUserIdAndKind" resultType="java.lang.Integer">
+        SELECT quantity
+        FROM user_consumables
+        WHERE user_id = #{userId}
+          AND kind = #{kind}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO user_consumables (user_id, kind, quantity)
+        VALUES (#{userId}, #{kind}, #{quantity})
+    </insert>
+
+    <update id="updateQuantity">
+        UPDATE user_consumables
+        SET quantity = #{quantity}
+        WHERE user_id = #{userId}
+          AND kind = #{kind}
+    </update>
+</mapper>

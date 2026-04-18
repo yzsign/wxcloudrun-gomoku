@@ -12,6 +12,7 @@ import com.gomoku.sync.domain.UserEquippedCosmetic;
 import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.mapper.UserPieceSkinUnlockMapper;
+import com.gomoku.sync.service.ConsumableService;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +35,7 @@ public class UserRatingController {
     private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
     private final SessionJwtService sessionJwtService;
     private final ObjectMapper objectMapper;
+    private final ConsumableService consumableService;
 
     public UserRatingController(
             UserMapper userMapper,
@@ -41,13 +43,15 @@ public class UserRatingController {
             UserPieceSkinUnlockMapper userPieceSkinUnlockMapper,
             UserEquippedCosmeticMapper userEquippedCosmeticMapper,
             SessionJwtService sessionJwtService,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ConsumableService consumableService) {
         this.userMapper = userMapper;
         this.userCheckinMapper = userCheckinMapper;
         this.userPieceSkinUnlockMapper = userPieceSkinUnlockMapper;
         this.userEquippedCosmeticMapper = userEquippedCosmeticMapper;
         this.sessionJwtService = sessionJwtService;
         this.objectMapper = objectMapper;
+        this.consumableService = consumableService;
     }
 
     private List<String> parseCheckinHistoryJson(String json) {
@@ -118,7 +122,8 @@ public class UserRatingController {
                 tuanUnlocked,
                 pieceSkinIds,
                 pieceSkinOut,
-                themeSlot);
+                themeSlot,
+                consumableService.getDaggerCount(uid.get()));
         return ResponseEntity.ok(body);
     }
 }
