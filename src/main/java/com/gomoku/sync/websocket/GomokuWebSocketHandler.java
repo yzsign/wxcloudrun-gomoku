@@ -238,10 +238,31 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             handleDrawCancel(session, room, color);
         } else if ("CHAT_SEND".equals(type)) {
             handleChatSend(session, room, color, root);
+        } else if ("AVATAR_SKILL_SEND".equals(type)) {
+            handleAvatarSkillSend(room, color, root);
         } else if ("CLIENT_BOT_MOVE".equals(type)) {
             handleClientBotMove(session, room, color, root);
         } else {
             sendToSession(session, error("未知消息类型: " + type));
+        }
+    }
+
+    /** 头像旁道具表现（短剑等）：仅转发给对手客户端，由双方各自绘制；不发回己方（避免重复）。 */
+    private void handleAvatarSkillSend(GameRoom room, int color, JsonNode root) throws Exception {
+        String panelKey = root.path("panelKey").asText("border");
+        if (panelKey.length() > 64) {
+            panelKey = panelKey.substring(0, 64);
+        }
+        ObjectNode out = objectMapper.createObjectNode();
+        out.put("type", "AVATAR_SKILL");
+        out.put("panelKey", panelKey);
+        out.put("fromColor", color);
+        String json = objectMapper.writeValueAsString(out);
+        TextMessage msg = new TextMessage(Objects.requireNonNull(json));
+        WebSocketSession other =
+                color == Stone.BLACK ? room.getWhiteSession() : room.getBlackSession();
+        if (other != null && other.isOpen()) {
+            sendToSession(other, msg);
         }
     }
 
