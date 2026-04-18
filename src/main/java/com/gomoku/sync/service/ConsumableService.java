@@ -12,15 +12,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConsumableService {
 
     public static final String KIND_DAGGER = "dagger";
-    /** 与小程序 themes.CONSUMABLE_DAGGER_COST_POINTS 一致：2 团团积分兑换 1 个短剑 */
-    public static final int DAGGER_REDEEM_COST_ACTIVITY_POINTS = 2;
 
     private final UserMapper userMapper;
     private final UserConsumableMapper userConsumableMapper;
+    private final ShopPricingService shopPricingService;
 
-    public ConsumableService(UserMapper userMapper, UserConsumableMapper userConsumableMapper) {
+    public ConsumableService(
+            UserMapper userMapper,
+            UserConsumableMapper userConsumableMapper,
+            ShopPricingService shopPricingService) {
         this.userMapper = userMapper;
         this.userConsumableMapper = userConsumableMapper;
+        this.shopPricingService = shopPricingService;
     }
 
     public static boolean isKnownKind(String kind) {
@@ -46,10 +49,14 @@ public class ConsumableService {
         if (u == null) {
             return ConsumableResult.userMissing();
         }
-        if (u.getActivityPoints() < DAGGER_REDEEM_COST_ACTIVITY_POINTS) {
+        int cost = shopPricingService.findPerUnitPointsCostForDagger().orElse(0);
+        if (cost <= 0) {
+            return ConsumableResult.invalidKind();
+        }
+        if (u.getActivityPoints() < cost) {
             return ConsumableResult.insufficientPoints();
         }
-        u.setActivityPoints(u.getActivityPoints() - DAGGER_REDEEM_COST_ACTIVITY_POINTS);
+        u.setActivityPoints(u.getActivityPoints() - cost);
         userMapper.updateActivityPoints(u);
 
         UserConsumable uc = userConsumableMapper.selectByUserIdAndKindForUpdate(userId, KIND_DAGGER);

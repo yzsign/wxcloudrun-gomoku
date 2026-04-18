@@ -1,3 +1,7 @@
--- 已废弃：短剑库存迁至 user_consumables（见 migration-v31），勿在 users 表增加 consumable_dagger_count。
--- 保留此文件以免与旧部署脚本名称混淆；执行时无表结构变更。
+-- =============================================================================
+-- v30（已废弃）：历史上曾向 users 增加 consumable_dagger_count
+-- =============================================================================
+-- 现以 migration-v31 的 user_consumables 表为准，勿再在 users 上增加该列。
+-- 保留本文件名，避免旧部署脚本列表缺号；执行本文件不产生 DDL，仅返回提示行。
+-- =============================================================================
 SELECT 'deprecated: consumables use user_consumables (migration-v31)' AS migration_v30_note;

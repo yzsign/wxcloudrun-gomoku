@@ -7,10 +7,8 @@ import com.gomoku.sync.mapper.UserPieceSkinUnlockMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class PieceSkinRedeemService {
@@ -22,34 +20,26 @@ public class PieceSkinRedeemService {
 
     private static final String SOURCE_POINTS = "ACTIVITY_POINTS";
 
-    private static final Map<String, Integer> SKIN_COST_POINTS;
-
-    static {
-        Map<String, Integer> m = new HashMap<>();
-        m.put(SKIN_QINGTAO_LIBAI, 200);
-        m.put(THEME_MINT, 200);
-        m.put(THEME_INK, 200);
-        SKIN_COST_POINTS = Collections.unmodifiableMap(m);
-    }
-
     private final UserMapper userMapper;
     private final UserPieceSkinUnlockMapper userPieceSkinUnlockMapper;
+    private final ShopPricingService shopPricingService;
 
-    public PieceSkinRedeemService(UserMapper userMapper, UserPieceSkinUnlockMapper userPieceSkinUnlockMapper) {
+    public PieceSkinRedeemService(
+            UserMapper userMapper,
+            UserPieceSkinUnlockMapper userPieceSkinUnlockMapper,
+            ShopPricingService shopPricingService) {
         this.userMapper = userMapper;
         this.userPieceSkinUnlockMapper = userPieceSkinUnlockMapper;
+        this.shopPricingService = shopPricingService;
     }
 
-    public static boolean isRedeemableSkinId(String skinId) {
-        return skinId != null && SKIN_COST_POINTS.containsKey(skinId);
+    /** 是否可用积分兑换（shop 配置了一次性积分价） */
+    public boolean isRedeemableSkinId(String skinId) {
+        return shopPricingService.findOneTimeUnlockPointsCost(skinId).isPresent();
     }
 
-    public static int costPointsFor(String skinId) {
-        if (skinId == null) {
-            return 0;
-        }
-        Integer c = SKIN_COST_POINTS.get(skinId);
-        return c != null ? c : 0;
+    public int costPointsFor(String skinId) {
+        return shopPricingService.findOneTimeUnlockPointsCost(skinId).orElse(0);
     }
 
     /**
@@ -57,10 +47,11 @@ public class PieceSkinRedeemService {
      */
     @Transactional
     public PieceSkinRedeemResult redeemWithPoints(long userId, String skinId) {
-        if (!isRedeemableSkinId(skinId)) {
+        Optional<Integer> costOpt = shopPricingService.findOneTimeUnlockPointsCost(skinId);
+        if (!costOpt.isPresent()) {
             return PieceSkinRedeemResult.invalidSkin();
         }
-        int cost = costPointsFor(skinId);
+        int cost = costOpt.get();
         User u = userMapper.selectByIdForUpdate(userId);
         if (u == null) {
             return PieceSkinRedeemResult.userMissing();

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.ShopMapper">
+
+    <select id="selectCurrentPointsAmount" resultType="java.lang.Integer">
+        SELECT sip.amount
+        FROM shop_items si
+        INNER JOIN shop_item_prices sip ON sip.shop_item_id = si.id
+            AND sip.currency = 'ACTIVITY_POINTS'
+            AND sip.unit_type = #{unitType}
+            AND (sip.valid_from IS NULL OR sip.valid_from &lt;= NOW(3))
+            AND (sip.valid_to IS NULL OR sip.valid_to &gt;= NOW(3))
+        WHERE si.item_code = #{itemCode}
+          AND si.enabled = 1
+        ORDER BY sip.id DESC
+        LIMIT 1
+    </select>
+
+    <!-- 每商品一行；取当前有效价中 id 最大的一条，避免多行 join -->
+    <sql id="ActivePricePredicate">
+        p.shop_item_id = si.id
+            AND p.currency = 'ACTIVITY_POINTS'
+            AND (p.valid_from IS NULL OR p.valid_from &lt;= NOW(3))
+            AND (p.valid_to IS NULL OR p.valid_to &gt;= NOW(3))
+    </sql>
+    <select id="selectEnabledCatalogWithCurrentPrices" resultType="com.gomoku.sync.api.dto.ShopCatalogItemDto">
+        SELECT
+            si.item_code AS itemCode,
+            si.shop_category AS shopCategory,
+            si.redeem_mode AS redeemMode,
+            si.display_label AS displayLabel,
+            si.sort_order AS sortOrder,
+            si.consumable_kind AS consumableKind,
+            si.client_row_id AS clientRowId,
+            (SELECT p.amount FROM shop_item_prices p
+             WHERE <include refid="ActivePricePredicate"/>
+             ORDER BY p.id DESC LIMIT 1) AS priceAmount,
+            (SELECT p.currency FROM shop_item_prices p
+             WHERE <include refid="ActivePricePredicate"/>
+             ORDER BY p.id DESC LIMIT 1) AS currency,
+            (SELECT p.unit_type FROM shop_item_prices p
+             WHERE <include refid="ActivePricePredicate"/>
+             ORDER BY p.id DESC LIMIT 1) AS unitType
+        FROM shop_items si
+        WHERE si.enabled = 1
+        ORDER BY si.sort_order ASC, si.id ASC
+    </select>
+</mapper>
