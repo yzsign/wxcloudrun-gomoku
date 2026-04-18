@@ -89,6 +89,7 @@ public class UserRatingController {
         List<String> pieceSkinIds = userPieceSkinUnlockMapper.selectSkinIdsByUserId(uid.get());
         String pieceSlot = null;
         String themeSlot = null;
+        String boardSkillSlot = null;
         for (UserEquippedCosmetic row : userEquippedCosmeticMapper.selectByUserId(uid.get())) {
             if (row == null || row.getCategory() == null) {
                 continue;
@@ -97,9 +98,14 @@ public class UserRatingController {
                 pieceSlot = row.getItemId();
             } else if (CosmeticCategory.THEME.equals(row.getCategory())) {
                 themeSlot = row.getItemId();
+            } else if (CosmeticCategory.BOARD_SKILL.equals(row.getCategory())) {
+                boardSkillSlot = row.getItemId();
             }
         }
         String pieceSkinOut = pieceSlot != null && !pieceSlot.isEmpty() ? pieceSlot : u.getPieceSkinId();
+        boolean daggerEquipped =
+                boardSkillSlot != null
+                        && ConsumableService.KIND_DAGGER.equalsIgnoreCase(boardSkillSlot.trim());
         UserRatingResponse body = new UserRatingResponse(
                 u.getId().longValue(),
                 u.getEloScore(),
@@ -123,6 +129,7 @@ public class UserRatingController {
                 pieceSkinIds,
                 pieceSkinOut,
                 themeSlot,
+                daggerEquipped,
                 consumableService.getDaggerCount(uid.get()));
         return ResponseEntity.ok(body);
     }

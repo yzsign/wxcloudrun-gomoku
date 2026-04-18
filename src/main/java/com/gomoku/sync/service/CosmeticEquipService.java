@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class CosmeticEquipService {
 
     private static final String THEME_CLASSIC = "classic";
+    private static final String BOARD_SKILL_ITEM_DAGGER = "dagger";
+    private static final String BOARD_SKILL_CLEAR = "off";
 
     private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
     private final UserMapper userMapper;
@@ -55,7 +57,29 @@ public class CosmeticEquipService {
         if (CosmeticCategory.THEME.equalsIgnoreCase(cat)) {
             return equipTheme(userId, itemId);
         }
+        if (CosmeticCategory.BOARD_SKILL.equalsIgnoreCase(cat)) {
+            return equipBoardSkill(userId, itemId);
+        }
         return EquipResult.unknownCategory();
+    }
+
+    private EquipResult equipBoardSkill(long userId, String rawItemId) {
+        if (rawItemId == null) {
+            return EquipResult.badRequest();
+        }
+        String itemId = rawItemId.trim();
+        if (itemId.isEmpty()) {
+            return EquipResult.badRequest();
+        }
+        if (BOARD_SKILL_CLEAR.equalsIgnoreCase(itemId)) {
+            userEquippedCosmeticMapper.deleteByUserIdAndCategory(userId, CosmeticCategory.BOARD_SKILL);
+            return EquipResult.ok(new EquipResponse(CosmeticCategory.BOARD_SKILL, null));
+        }
+        if (!BOARD_SKILL_ITEM_DAGGER.equalsIgnoreCase(itemId)) {
+            return EquipResult.invalidItem();
+        }
+        userEquippedCosmeticMapper.upsert(userId, CosmeticCategory.BOARD_SKILL, BOARD_SKILL_ITEM_DAGGER);
+        return EquipResult.ok(new EquipResponse(CosmeticCategory.BOARD_SKILL, BOARD_SKILL_ITEM_DAGGER));
     }
 
     private EquipResult equipTheme(long userId, String themeId) {

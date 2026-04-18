@@ -1,7 +1,7 @@
 package com.gomoku.sync.api.dto;
 
 /**
- * POST /api/me/equip：按种类装备唯一一件（PIECE_SKIN / THEME / 未来扩展）。
+ * POST /api/me/equip：按种类装备唯一一件（PIECE_SKIN / THEME / BOARD_SKILL 等）。
  */
 public class EquipRequest {
 

@@ -14,4 +14,9 @@
         VALUES (#{userId}, #{category}, #{itemId})
         ON DUPLICATE KEY UPDATE item_id = VALUES(item_id)
     </insert>
+
+    <delete id="deleteByUserIdAndCategory">
+        DELETE FROM user_equipped_cosmetics
+        WHERE user_id = #{userId} AND category = #{category}
+    </delete>
 </mapper>

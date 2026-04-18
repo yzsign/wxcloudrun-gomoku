@@ -13,4 +13,7 @@ public interface UserEquippedCosmeticMapper {
             @Param("userId") long userId,
             @Param("category") String category,
             @Param("itemId") String itemId);
+
+    int deleteByUserIdAndCategory(
+            @Param("userId") long userId, @Param("category") String category);
 }
