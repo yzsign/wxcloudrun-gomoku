@@ -8,6 +8,7 @@ import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserCheckinState;
 import com.gomoku.sync.mapper.UserCheckinMapper;
 import com.gomoku.sync.domain.CosmeticCategory;
+import com.gomoku.sync.service.ConsumableService;
 import com.gomoku.sync.domain.UserEquippedCosmetic;
 import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
@@ -90,6 +91,7 @@ public class UserRatingController {
         String pieceSlot = null;
         String themeSlot = null;
         String boardSkillSlot = null;
+        String boardSkillLoveSlot = null;
         for (UserEquippedCosmetic row : userEquippedCosmeticMapper.selectByUserId(uid.get())) {
             if (row == null || row.getCategory() == null) {
                 continue;
@@ -100,12 +102,17 @@ public class UserRatingController {
                 themeSlot = row.getItemId();
             } else if (CosmeticCategory.BOARD_SKILL.equals(row.getCategory())) {
                 boardSkillSlot = row.getItemId();
+            } else if (CosmeticCategory.BOARD_SKILL_LOVE.equals(row.getCategory())) {
+                boardSkillLoveSlot = row.getItemId();
             }
         }
         String pieceSkinOut = pieceSlot != null && !pieceSlot.isEmpty() ? pieceSlot : u.getPieceSkinId();
         boolean daggerEquipped =
                 boardSkillSlot != null
                         && ConsumableService.KIND_DAGGER.equalsIgnoreCase(boardSkillSlot.trim());
+        boolean loveEquipped =
+                boardSkillLoveSlot != null
+                        && ConsumableService.KIND_LOVE.equalsIgnoreCase(boardSkillLoveSlot.trim());
         UserRatingResponse body = new UserRatingResponse(
                 u.getId().longValue(),
                 u.getEloScore(),
@@ -130,7 +137,9 @@ public class UserRatingController {
                 pieceSkinOut,
                 themeSlot,
                 daggerEquipped,
-                consumableService.getDaggerCount(uid.get()));
+                consumableService.getDaggerCount(uid.get()),
+                loveEquipped,
+                consumableService.getLoveCount(uid.get()));
         return ResponseEntity.ok(body);
     }
 }

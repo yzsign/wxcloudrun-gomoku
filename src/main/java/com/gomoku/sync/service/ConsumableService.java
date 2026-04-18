@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConsumableService {
 
     public static final String KIND_DAGGER = "dagger";
+    public static final String KIND_LOVE = "love";
 
     private final UserMapper userMapper;
     private final UserConsumableMapper userConsumableMapper;
@@ -27,7 +28,11 @@ public class ConsumableService {
     }
 
     public static boolean isKnownKind(String kind) {
-        return KIND_DAGGER.equalsIgnoreCase(kind == null ? "" : kind.trim());
+        if (kind == null) {
+            return false;
+        }
+        String k = kind.trim().toLowerCase();
+        return KIND_DAGGER.equals(k) || KIND_LOVE.equals(k);
     }
 
     /** 无记录视为 0 */
@@ -36,22 +41,39 @@ public class ConsumableService {
         return q != null ? q : 0;
     }
 
+    /** 无记录视为 0 */
+    public int getLoveCount(long userId) {
+        Integer q = userConsumableMapper.selectQuantityByUserIdAndKind(userId, KIND_LOVE);
+        return q != null ? q : 0;
+    }
+
+    private ConsumableMutationResponse mutationBody(long userId, int activityPoints) {
+        return new ConsumableMutationResponse(activityPoints, getDaggerCount(userId), getLoveCount(userId));
+    }
+
     @Transactional
     public ConsumableResult redeemWithPoints(long userId, String kind) {
         if (kind == null || kind.trim().isEmpty()) {
             return ConsumableResult.invalidKind();
         }
         String k = kind.trim().toLowerCase();
-        if (!KIND_DAGGER.equals(k)) {
+        if (KIND_DAGGER.equals(k)) {
+            return redeemOneUnit(userId, KIND_DAGGER, shopPricingService.findPerUnitPointsCostForDagger());
+        }
+        if (KIND_LOVE.equals(k)) {
+            return redeemOneUnit(userId, KIND_LOVE, shopPricingService.findPerUnitPointsCostForLove());
+        }
+        return ConsumableResult.invalidKind();
+    }
+
+    private ConsumableResult redeemOneUnit(long userId, String kind, java.util.Optional<Integer> costOpt) {
+        int cost = costOpt.orElse(0);
+        if (cost <= 0) {
             return ConsumableResult.invalidKind();
         }
         User u = userMapper.selectByIdForUpdate(userId);
         if (u == null) {
             return ConsumableResult.userMissing();
-        }
-        int cost = shopPricingService.findPerUnitPointsCostForDagger().orElse(0);
-        if (cost <= 0) {
-            return ConsumableResult.invalidKind();
         }
         if (u.getActivityPoints() < cost) {
             return ConsumableResult.insufficientPoints();
@@ -59,12 +81,12 @@ public class ConsumableService {
         u.setActivityPoints(u.getActivityPoints() - cost);
         userMapper.updateActivityPoints(u);
 
-        UserConsumable uc = userConsumableMapper.selectByUserIdAndKindForUpdate(userId, KIND_DAGGER);
+        UserConsumable uc = userConsumableMapper.selectByUserIdAndKindForUpdate(userId, kind);
         int next;
         if (uc == null) {
             uc = new UserConsumable();
             uc.setUserId(userId);
-            uc.setKind(KIND_DAGGER);
+            uc.setKind(kind);
             uc.setQuantity(1);
             userConsumableMapper.insert(uc);
             next = 1;
@@ -73,7 +95,7 @@ public class ConsumableService {
             uc.setQuantity(next);
             userConsumableMapper.updateQuantity(uc);
         }
-        return ConsumableResult.ok(new ConsumableMutationResponse(u.getActivityPoints(), next));
+        return ConsumableResult.ok(mutationBody(userId, u.getActivityPoints()));
     }
 
     @Transactional
@@ -82,14 +104,14 @@ public class ConsumableService {
             return ConsumableResult.invalidKind();
         }
         String k = kind.trim().toLowerCase();
-        if (!KIND_DAGGER.equals(k)) {
+        if (!KIND_DAGGER.equals(k) && !KIND_LOVE.equals(k)) {
             return ConsumableResult.invalidKind();
         }
         User u = userMapper.selectByIdForUpdate(userId);
         if (u == null) {
             return ConsumableResult.userMissing();
         }
-        UserConsumable uc = userConsumableMapper.selectByUserIdAndKindForUpdate(userId, KIND_DAGGER);
+        UserConsumable uc = userConsumableMapper.selectByUserIdAndKindForUpdate(userId, k);
         int qty = uc == null ? 0 : Math.max(0, uc.getQuantity());
         if (qty < 1) {
             return ConsumableResult.noneLeft();
@@ -97,7 +119,7 @@ public class ConsumableService {
         int next = qty - 1;
         uc.setQuantity(next);
         userConsumableMapper.updateQuantity(uc);
-        return ConsumableResult.ok(new ConsumableMutationResponse(u.getActivityPoints(), next));
+        return ConsumableResult.ok(mutationBody(userId, u.getActivityPoints()));
     }
 
     public enum ErrorKind {

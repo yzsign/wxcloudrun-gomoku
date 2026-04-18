@@ -17,6 +17,7 @@ public class CosmeticEquipService {
 
     private static final String THEME_CLASSIC = "classic";
     private static final String BOARD_SKILL_ITEM_DAGGER = "dagger";
+    private static final String BOARD_SKILL_ITEM_LOVE = "love";
     private static final String BOARD_SKILL_CLEAR = "off";
 
     private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
@@ -60,6 +61,9 @@ public class CosmeticEquipService {
         if (CosmeticCategory.BOARD_SKILL.equalsIgnoreCase(cat)) {
             return equipBoardSkill(userId, itemId);
         }
+        if (CosmeticCategory.BOARD_SKILL_LOVE.equalsIgnoreCase(cat)) {
+            return equipBoardSkillLove(userId, itemId);
+        }
         return EquipResult.unknownCategory();
     }
 
@@ -80,6 +84,25 @@ public class CosmeticEquipService {
         }
         userEquippedCosmeticMapper.upsert(userId, CosmeticCategory.BOARD_SKILL, BOARD_SKILL_ITEM_DAGGER);
         return EquipResult.ok(new EquipResponse(CosmeticCategory.BOARD_SKILL, BOARD_SKILL_ITEM_DAGGER));
+    }
+
+    private EquipResult equipBoardSkillLove(long userId, String rawItemId) {
+        if (rawItemId == null) {
+            return EquipResult.badRequest();
+        }
+        String itemId = rawItemId.trim();
+        if (itemId.isEmpty()) {
+            return EquipResult.badRequest();
+        }
+        if (BOARD_SKILL_CLEAR.equalsIgnoreCase(itemId)) {
+            userEquippedCosmeticMapper.deleteByUserIdAndCategory(userId, CosmeticCategory.BOARD_SKILL_LOVE);
+            return EquipResult.ok(new EquipResponse(CosmeticCategory.BOARD_SKILL_LOVE, null));
+        }
+        if (!BOARD_SKILL_ITEM_LOVE.equalsIgnoreCase(itemId)) {
+            return EquipResult.invalidItem();
+        }
+        userEquippedCosmeticMapper.upsert(userId, CosmeticCategory.BOARD_SKILL_LOVE, BOARD_SKILL_ITEM_LOVE);
+        return EquipResult.ok(new EquipResponse(CosmeticCategory.BOARD_SKILL_LOVE, BOARD_SKILL_ITEM_LOVE));
     }
 
     private EquipResult equipTheme(long userId, String themeId) {

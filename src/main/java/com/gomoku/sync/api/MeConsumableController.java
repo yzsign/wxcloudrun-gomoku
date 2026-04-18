@@ -77,7 +77,7 @@ public class MeConsumableController {
                         .body(new ApiError("INVALID_KIND", "不支持的消耗品"));
             case NONE_LEFT:
                 return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(new ApiError("NONE_LEFT", "短剑数量不足"));
+                        .body(new ApiError("NONE_LEFT", "道具数量不足"));
             case NOT_FOUND:
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(new ApiError("NOT_FOUND", "用户不存在"));

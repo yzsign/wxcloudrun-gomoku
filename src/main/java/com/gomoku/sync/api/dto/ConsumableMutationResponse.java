@@ -7,10 +7,12 @@ public class ConsumableMutationResponse {
 
     private final int activityPoints;
     private final int consumableDaggerCount;
+    private final int consumableLoveCount;
 
-    public ConsumableMutationResponse(int activityPoints, int consumableDaggerCount) {
+    public ConsumableMutationResponse(int activityPoints, int consumableDaggerCount, int consumableLoveCount) {
         this.activityPoints = activityPoints;
         this.consumableDaggerCount = consumableDaggerCount;
+        this.consumableLoveCount = consumableLoveCount;
     }
 
     public int getActivityPoints() {
@@ -19,5 +21,9 @@ public class ConsumableMutationResponse {
 
     public int getConsumableDaggerCount() {
         return consumableDaggerCount;
+    }
+
+    public int getConsumableLoveCount() {
+        return consumableLoveCount;
     }
 }

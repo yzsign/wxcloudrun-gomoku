@@ -42,6 +42,12 @@ public class UserRatingResponse {
     private final Boolean daggerSkillEquipped;
     /** 本人 /api/me/rating 专用：短剑消耗品持有数 */
     private final Integer consumableDaggerCount;
+    /**
+     * 本人 /api/me/rating 专用：是否装备爱心技能槽；非本人接口传 null 不输出。
+     */
+    private final Boolean loveSkillEquipped;
+    /** 本人 /api/me/rating 专用：爱心消耗品持有数 */
+    private final Integer consumableLoveCount;
 
     public UserRatingResponse(
             long userId,
@@ -69,6 +75,9 @@ public class UserRatingResponse {
                 lowTrust,
                 placementFairGames,
                 newbieMatchGames,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -156,6 +165,8 @@ public class UserRatingResponse {
                 null,
                 null,
                 null,
+                null,
+                null,
                 null);
     }
 
@@ -183,7 +194,9 @@ public class UserRatingResponse {
             String pieceSkinId,
             String themeId,
             Boolean daggerSkillEquipped,
-            Integer consumableDaggerCount) {
+            Integer consumableDaggerCount,
+            Boolean loveSkillEquipped,
+            Integer consumableLoveCount) {
         this.userId = userId;
         this.eloScore = eloScore;
         this.activityPoints = activityPoints;
@@ -208,6 +221,8 @@ public class UserRatingResponse {
         this.themeId = themeId;
         this.daggerSkillEquipped = daggerSkillEquipped;
         this.consumableDaggerCount = consumableDaggerCount;
+        this.loveSkillEquipped = loveSkillEquipped;
+        this.consumableLoveCount = consumableLoveCount;
     }
 
     public long getUserId() {
@@ -304,5 +319,13 @@ public class UserRatingResponse {
 
     public Integer getConsumableDaggerCount() {
         return consumableDaggerCount;
+    }
+
+    public Boolean getLoveSkillEquipped() {
+        return loveSkillEquipped;
+    }
+
+    public Integer getConsumableLoveCount() {
+        return consumableLoveCount;
     }
 }

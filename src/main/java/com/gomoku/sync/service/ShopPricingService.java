@@ -21,6 +21,7 @@ public class ShopPricingService {
     public static final String UNIT_PER_UNIT = "PER_UNIT";
     /** 与 shop_items.item_code 中 dagger 一致 */
     public static final String ITEM_CODE_DAGGER = "dagger";
+    public static final String ITEM_CODE_LOVE = "love";
 
     private static final Map<String, Integer> LEGACY_ONE_TIME_POINTS;
 
@@ -33,6 +34,7 @@ public class ShopPricingService {
     }
 
     private static final int LEGACY_DAGGER_PER_UNIT_POINTS = 2;
+    private static final int LEGACY_LOVE_PER_UNIT_POINTS = 2;
 
     private final ShopMapper shopMapper;
 
@@ -60,6 +62,15 @@ public class ShopPricingService {
             return Optional.of(db);
         }
         return Optional.of(LEGACY_DAGGER_PER_UNIT_POINTS);
+    }
+
+    /** 消耗品按件兑换价（爱心） */
+    public Optional<Integer> findPerUnitPointsCostForLove() {
+        Integer db = shopMapper.selectCurrentPointsAmount(ITEM_CODE_LOVE, UNIT_PER_UNIT);
+        if (db != null && db > 0) {
+            return Optional.of(db);
+        }
+        return Optional.of(LEGACY_LOVE_PER_UNIT_POINTS);
     }
 
     public ShopCatalogResponse buildCatalog() {
