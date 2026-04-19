@@ -2,6 +2,8 @@
 -- 用户消耗品库存（独立于 users；与杂货铺 consumable 商品、兑换/use API 对应）
 -- =============================================================================
 -- 与 shop_items 中 item_code=dagger、consumable_kind=dagger 对应；数量存在本表。
+-- 联合唯一键 uk_user_consumable (user_id, kind) 即 (user_id, kind) 查询与 FOR UPDATE 所用索引，
+-- 与 migration-v34 补建目标一致；无需再建同名非唯一联合索引。
 
 CREATE TABLE IF NOT EXISTS `user_consumables` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',

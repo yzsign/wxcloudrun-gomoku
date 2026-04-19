@@ -51,6 +51,25 @@ public class ConsumableService {
         return new ConsumableMutationResponse(activityPoints, getDaggerCount(userId), getLoveCount(userId));
     }
 
+    /**
+     * useOne 扣减后：已有一种库存为内存中的新值，仅再查另一种，避免两次 count 查询。
+     */
+    private ConsumableMutationResponse mutationBodyAfterUse(
+            long userId, int activityPoints, String usedKind, int newQtyForUsedKind) {
+        int dagger;
+        int love;
+        if (KIND_DAGGER.equals(usedKind)) {
+            dagger = newQtyForUsedKind;
+            Integer q = userConsumableMapper.selectQuantityByUserIdAndKind(userId, KIND_LOVE);
+            love = q != null ? q : 0;
+        } else {
+            love = newQtyForUsedKind;
+            Integer q = userConsumableMapper.selectQuantityByUserIdAndKind(userId, KIND_DAGGER);
+            dagger = q != null ? q : 0;
+        }
+        return new ConsumableMutationResponse(activityPoints, dagger, love);
+    }
+
     @Transactional
     public ConsumableResult redeemWithPoints(long userId, String kind) {
         if (kind == null || kind.trim().isEmpty()) {
@@ -107,7 +126,8 @@ public class ConsumableService {
         if (!KIND_DAGGER.equals(k) && !KIND_LOVE.equals(k)) {
             return ConsumableResult.invalidKind();
         }
-        User u = userMapper.selectByIdForUpdate(userId);
+        /** 不修改 users 表，无需对用户行 FOR UPDATE，减少锁等待与一次重锁读 */
+        User u = userMapper.selectById(userId);
         if (u == null) {
             return ConsumableResult.userMissing();
         }
@@ -119,7 +139,8 @@ public class ConsumableService {
         int next = qty - 1;
         uc.setQuantity(next);
         userConsumableMapper.updateQuantity(uc);
-        return ConsumableResult.ok(mutationBody(userId, u.getActivityPoints()));
+        return ConsumableResult.ok(
+                mutationBodyAfterUse(userId, u.getActivityPoints(), k, next));
     }
 
     public enum ErrorKind {
