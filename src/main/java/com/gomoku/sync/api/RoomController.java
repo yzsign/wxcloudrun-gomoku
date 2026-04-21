@@ -5,12 +5,16 @@ import com.gomoku.sync.api.dto.CreateRoomResponse;
 import com.gomoku.sync.api.dto.JoinRoomResponse;
 import com.gomoku.sync.api.dto.RoomResource;
 import com.gomoku.sync.api.dto.UserRatingResponse;
+import com.gomoku.sync.domain.CosmeticCategory;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.User;
+import com.gomoku.sync.domain.UserEquippedCosmetic;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
+import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
+import com.gomoku.sync.service.ConsumableService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.http.HttpStatus;
@@ -33,16 +37,22 @@ public class RoomController {
     private final SessionJwtService sessionJwtService;
     private final RoomParticipantMapper roomParticipantMapper;
     private final UserMapper userMapper;
+    private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
+    private final ConsumableService consumableService;
 
     public RoomController(
             RoomService roomService,
             SessionJwtService sessionJwtService,
             RoomParticipantMapper roomParticipantMapper,
-            UserMapper userMapper) {
+            UserMapper userMapper,
+            UserEquippedCosmeticMapper userEquippedCosmeticMapper,
+            ConsumableService consumableService) {
         this.roomService = roomService;
         this.sessionJwtService = sessionJwtService;
         this.roomParticipantMapper = roomParticipantMapper;
         this.userMapper = userMapper;
+        this.userEquippedCosmeticMapper = userEquippedCosmeticMapper;
+        this.consumableService = consumableService;
     }
 
     /**
@@ -174,22 +184,56 @@ public class RoomController {
         }
         String nick = u.getNickname();
         String av = u.getAvatarUrl();
-        UserRatingResponse body = new UserRatingResponse(
-                u.getId().longValue(),
-                u.getEloScore(),
-                u.getActivityPoints(),
-                u.getConsecutiveWins(),
-                u.getConsecutiveLosses(),
-                u.getTotalGames(),
-                u.getWinCount(),
-                u.getDrawCount(),
-                u.getRunawayCount(),
-                u.isLowTrust(),
-                u.getPlacementFairGames(),
-                u.getNewbieMatchGames(),
-                nick != null && !nick.isEmpty() ? nick : null,
-                av != null && !av.isEmpty() ? av : null,
-                u.getGender());
+        String pieceSlot = null;
+        String boardSkillSlot = null;
+        String boardSkillLoveSlot = null;
+        for (UserEquippedCosmetic row : userEquippedCosmeticMapper.selectByUserId(opponentId)) {
+            if (row == null || row.getCategory() == null) {
+                continue;
+            }
+            if (CosmeticCategory.PIECE_SKIN.equals(row.getCategory())) {
+                pieceSlot = row.getItemId();
+            } else if (CosmeticCategory.BOARD_SKILL.equals(row.getCategory())) {
+                boardSkillSlot = row.getItemId();
+            } else if (CosmeticCategory.BOARD_SKILL_LOVE.equals(row.getCategory())) {
+                boardSkillLoveSlot = row.getItemId();
+            }
+        }
+        String pieceSkinOut = pieceSlot != null && !pieceSlot.isEmpty() ? pieceSlot : u.getPieceSkinId();
+        boolean daggerEquipped =
+                boardSkillSlot != null
+                        && ConsumableService.KIND_DAGGER.equalsIgnoreCase(boardSkillSlot.trim());
+        boolean loveEquipped =
+                boardSkillLoveSlot != null
+                        && ConsumableService.KIND_LOVE.equalsIgnoreCase(boardSkillLoveSlot.trim());
+        UserRatingResponse body =
+                new UserRatingResponse(
+                        u.getId().longValue(),
+                        u.getEloScore(),
+                        u.getActivityPoints(),
+                        u.getConsecutiveWins(),
+                        u.getConsecutiveLosses(),
+                        u.getTotalGames(),
+                        u.getWinCount(),
+                        u.getDrawCount(),
+                        u.getRunawayCount(),
+                        u.isLowTrust(),
+                        u.getPlacementFairGames(),
+                        u.getNewbieMatchGames(),
+                        nick != null && !nick.isEmpty() ? nick : null,
+                        av != null && !av.isEmpty() ? av : null,
+                        u.getGender(),
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        pieceSkinOut,
+                        null,
+                        daggerEquipped,
+                        consumableService.getDaggerCount(opponentId),
+                        loveEquipped,
+                        consumableService.getLoveCount(opponentId));
         return ResponseEntity.ok(body);
     }
 }
