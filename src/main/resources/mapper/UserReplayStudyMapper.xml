@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gomoku.sync.mapper.UserReplayStudyMapper">
+
+    <resultMap id="Row" type="com.gomoku.sync.domain.UserReplayStudy">
+        <id property="userId" column="user_id"/>
+        <result property="movesJson" column="moves_json"/>
+        <result property="replayStep" column="replay_step"/>
+        <result property="boardJson" column="board_json"/>
+        <result property="sideToMove" column="side_to_move"/>
+        <result property="sourceGameId" column="source_game_id"/>
+        <result property="blackPieceSkinId" column="black_piece_skin_id"/>
+        <result property="whitePieceSkinId" column="white_piece_skin_id"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="Cols">
+        user_id, moves_json, replay_step, board_json, side_to_move, source_game_id,
+        black_piece_skin_id, white_piece_skin_id, updated_at
+    </sql>
+
+    <select id="selectByUserId" resultMap="Row">
+        SELECT <include refid="Cols"/>
+        FROM user_replay_study
+        WHERE user_id = #{userId}
+        LIMIT 1
+    </select>
+
+    <insert id="upsert">
+        INSERT INTO user_replay_study (
+            user_id, moves_json, replay_step, board_json, side_to_move, source_game_id,
+            black_piece_skin_id, white_piece_skin_id
+        ) VALUES (
+            #{userId}, #{movesJson,jdbcType=LONGVARCHAR}, #{replayStep},
+            #{boardJson,jdbcType=LONGVARCHAR}, #{sideToMove},
+            #{sourceGameId,jdbcType=BIGINT},
+            #{blackPieceSkinId,jdbcType=VARCHAR}, #{whitePieceSkinId,jdbcType=VARCHAR}
+        )
+        ON DUPLICATE KEY UPDATE
+            moves_json = VALUES(moves_json),
+            replay_step = VALUES(replay_step),
+            board_json = VALUES(board_json),
+            side_to_move = VALUES(side_to_move),
+            source_game_id = VALUES(source_game_id),
+            black_piece_skin_id = VALUES(black_piece_skin_id),
+            white_piece_skin_id = VALUES(white_piece_skin_id)
+    </insert>
+
+    <delete id="deleteByUserId">
+        DELETE FROM user_replay_study WHERE user_id = #{userId}
+    </delete>
+</mapper>
