@@ -35,4 +35,12 @@ class EloRatingCalculatorTest {
         d += EloRatingCalculator.upsetBonus(1300, 1900);
         assertTrue(d >= 55 && d <= 65, "expect ~39+20, got " + d);
     }
+
+    @Test
+    void friendKScaleReducesCoreDelta() {
+        int full = EloRatingCalculator.delta(1500, 1500, 1.0, 40, 0, 0, false, false, 1.0);
+        int half = EloRatingCalculator.delta(1500, 1500, 1.0, 40, 0, 0, false, false, 0.5);
+        assertTrue(half < full && full > 0, "0.5 倍 K 时变动应小于全量 K");
+        assertTrue(Math.abs(half * 2.0 / full - 1.0) < 0.2, "约一半，因四舍五入可略有偏差: full=" + full + " half=" + half);
+    }
 }

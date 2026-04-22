@@ -27,11 +27,12 @@
         VALUES (#{roomId}, #{blackUserId}, #{blackToken}, #{randomMatch})
     </insert>
 
+    <!-- 与好友房一致：非随机匹配房，与 insertBlack(…, false) 语义相同，不依赖列 DEFAULT -->
     <insert id="insertPuzzleBlack">
         INSERT INTO room_participants (room_id, black_user_id, black_token, observer_user_id, observer_token, puzzle_room,
-                                       puzzle_init_board_json, puzzle_side_to_move)
+                                       puzzle_init_board_json, puzzle_side_to_move, random_match)
         VALUES (#{roomId}, #{blackUserId}, #{blackToken}, #{observerUserId}, #{observerToken}, 1,
-                #{puzzleInitBoardJson}, #{puzzleSideToMove})
+                #{puzzleInitBoardJson}, #{puzzleSideToMove}, 0)
     </insert>
 
     <update id="updateWhite">

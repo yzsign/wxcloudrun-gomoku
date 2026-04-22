@@ -238,6 +238,10 @@ public class RatingSettlementService {
         int blackEloBefore = black.getEloScore();
         int whiteEloBefore = white.getEloScore();
 
+        /** 好友等非随机对局：降低有效 K 与越级奖，抑制互刷；随机匹配 1.0 */
+        double eloKScale =
+                rp.isRandomMatch() ? 1.0 : EloRatingCalculator.FRIEND_NON_RANDOM_K_SCALE;
+
         int rawBlack;
         int rawWhite;
 
@@ -254,7 +258,8 @@ public class RatingSettlementService {
                     black.getConsecutiveWins(),
                     black.getConsecutiveLosses(),
                     black.isLowTrust(),
-                    forceM1);
+                    forceM1,
+                    eloKScale);
             rawWhite = EloRatingCalculator.delta(
                     whiteEloBefore,
                     blackEloBefore,
@@ -263,11 +268,12 @@ public class RatingSettlementService {
                     white.getConsecutiveWins(),
                     white.getConsecutiveLosses(),
                     white.isLowTrust(),
-                    false);
+                    false,
+                    eloKScale);
             if (runaway) {
                 rawWhite -= extraRunawayPenalty(white);
             }
-            rawBlack += EloRatingCalculator.upsetBonus(blackEloBefore, whiteEloBefore);
+            rawBlack += (int) Math.round(EloRatingCalculator.upsetBonus(blackEloBefore, whiteEloBefore) * eloKScale);
         } else {
             boolean forceM1 = runaway && Objects.equals(runawayUid, blackId);
             rawWhite = EloRatingCalculator.delta(
@@ -278,7 +284,8 @@ public class RatingSettlementService {
                     white.getConsecutiveWins(),
                     white.getConsecutiveLosses(),
                     white.isLowTrust(),
-                    forceM1);
+                    forceM1,
+                    eloKScale);
             rawBlack = EloRatingCalculator.delta(
                     blackEloBefore,
                     whiteEloBefore,
@@ -287,11 +294,12 @@ public class RatingSettlementService {
                     black.getConsecutiveWins(),
                     black.getConsecutiveLosses(),
                     black.isLowTrust(),
-                    false);
+                    false,
+                    eloKScale);
             if (runaway) {
                 rawBlack -= extraRunawayPenalty(black);
             }
-            rawWhite += EloRatingCalculator.upsetBonus(whiteEloBefore, blackEloBefore);
+            rawWhite += (int) Math.round(EloRatingCalculator.upsetBonus(whiteEloBefore, blackEloBefore) * eloKScale);
         }
 
         /** 残局好友房：受邀好友未挑战成功时不扣天梯分（仍计胜负与团团积分等逻辑由既有分支处理） */

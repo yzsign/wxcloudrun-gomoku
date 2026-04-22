@@ -5,6 +5,11 @@ package com.gomoku.sync.service.rating;
  */
 public final class EloRatingCalculator {
 
+    /**
+     * 非「随机匹配」对局（好友房、邀请房等）的 Elo 有效 K 倍率，用于降低互刷时天梯波动；随机匹配为 1.0。
+     */
+    public static final double FRIEND_NON_RANDOM_K_SCALE = 0.5;
+
     private EloRatingCalculator() {
     }
 
@@ -76,11 +81,39 @@ public final class EloRatingCalculator {
             int consecutiveLosses,
             boolean lowTrust,
             boolean forceM1ForThisSide) {
+        return delta(
+                selfElo,
+                opponentElo,
+                result,
+                totalSteps,
+                consecutiveWins,
+                consecutiveLosses,
+                lowTrust,
+                forceM1ForThisSide,
+                1.0);
+    }
+
+    /**
+     * @param kScale 将 K 等效为 {@code k * kScale}，用于非随机对局；随机匹配传 1.0。
+     */
+    public static int delta(
+            int selfElo,
+            int opponentElo,
+            double result,
+            int totalSteps,
+            int consecutiveWins,
+            int consecutiveLosses,
+            boolean lowTrust,
+            boolean forceM1ForThisSide,
+            double kScale) {
+        if (!Double.isFinite(kScale) || kScale < 0) {
+            throw new IllegalArgumentException("kScale 须为非负有限数");
+        }
         double e = expectedScore(selfElo, opponentElo);
         int k = kValue(selfElo, lowTrust);
         double m = forceM1ForThisSide && result >= 0.5 ? 1.0 : mValue(totalSteps);
         double c = cValue(consecutiveWins, consecutiveLosses, result);
-        return roundDelta(k * (result - e) * m * c);
+        return roundDelta(k * kScale * (result - e) * m * c);
     }
 
     /** §6.2 低分方胜且分差 ≥ 400 */
