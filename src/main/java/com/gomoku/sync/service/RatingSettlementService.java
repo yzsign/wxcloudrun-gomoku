@@ -8,6 +8,7 @@ import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.GameRoomStateSnapshot;
 import com.gomoku.sync.domain.RatingChangeLog;
 import com.gomoku.sync.domain.RoomParticipant;
+import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.mapper.GameMapper;
 import com.gomoku.sync.mapper.RatingChangeLogMapper;
@@ -155,6 +156,7 @@ public class RatingSettlementService {
                                     existingGame.getTotalSteps(),
                                     ran,
                                     randomExisting);
+            boolean cBlack = callerUserId == existingGame.getBlackUserId();
             return new SettleGameResponse(
                     existingId,
                     existingGame.getBlackEloAfter(),
@@ -164,7 +166,12 @@ public class RatingSettlementService {
                     bApAfter,
                     wApAfter,
                     bApDelta,
-                    wApDelta);
+                    wApDelta,
+                    cBlack ? existingGame.getBlackEloAfter() : existingGame.getWhiteEloAfter(),
+                    cBlack ? existingGame.getBlackEloDelta() : existingGame.getWhiteEloDelta(),
+                    cBlack ? bApAfter : wApAfter,
+                    cBlack ? bApDelta : wApDelta,
+                    cBlack);
         }
 
         RoomParticipant rp = roomParticipantMapper.selectByRoomId(req.getRoomId());
@@ -177,12 +184,28 @@ public class RatingSettlementService {
             throw new IllegalArgumentException("仅对局双方可提交结算");
         }
 
+        /**
+         * 与内存房间终局状态一致时，以服务器胜者为准，避免客户端把 winner 与 BLACK/WHITE
+         * 用 === 比错、或局次/重连时误报，导致黑胜白负反写进天梯。
+         */
+        if (live != null
+                && live.getMatchRound() == matchRound
+                && live.isGameOver()) {
+            Integer w = live.getWinner();
+            if (w == null) {
+                outcome = OUTCOME_DRAW;
+            } else if (w == Stone.BLACK) {
+                outcome = OUTCOME_BLACK_WIN;
+            } else if (w == Stone.WHITE) {
+                outcome = OUTCOME_WHITE_WIN;
+            }
+        }
+
         Long runawayUid = req.getRunawayUserId();
         boolean runaway = runawayUid != null;
         if (OUTCOME_DRAW.equals(outcome)) {
-            if (runaway) {
-                throw new IllegalArgumentException("和棋不可带 runawayUserId");
-            }
+            runawayUid = null;
+            runaway = false;
         } else if (OUTCOME_BLACK_WIN.equals(outcome)) {
             if (runaway && !Objects.equals(runawayUid, whiteId)) {
                 throw new IllegalArgumentException("BLACK_WIN 时逃跑方应为白方");
@@ -354,6 +377,7 @@ public class RatingSettlementService {
                 puzzleRoom
                         ? pfNew[1]
                         : activityPointsDeltaForSide(false, outcome, steps, runaway, randomMatchRoom);
+        boolean cBlack2 = callerUserId == blackId;
         return new SettleGameResponse(
                 gameId,
                 blackEloAfter,
@@ -363,7 +387,12 @@ public class RatingSettlementService {
                 black.getActivityPoints(),
                 white.getActivityPoints(),
                 bApDelta,
-                wApDelta);
+                wApDelta,
+                cBlack2 ? blackEloAfter : whiteEloAfter,
+                cBlack2 ? blackDeltaAct : whiteDeltaAct,
+                cBlack2 ? black.getActivityPoints() : white.getActivityPoints(),
+                cBlack2 ? bApDelta : wApDelta,
+                cBlack2);
     }
 
     /**
