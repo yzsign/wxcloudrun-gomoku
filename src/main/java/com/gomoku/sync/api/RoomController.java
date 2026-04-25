@@ -15,6 +15,7 @@ import com.gomoku.sync.mapper.RoomParticipantMapper;
 import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.service.ConsumableService;
+import com.gomoku.sync.service.FriendWatchService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,7 @@ public class RoomController {
     private final UserMapper userMapper;
     private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
     private final ConsumableService consumableService;
+    private final FriendWatchService friendWatchService;
 
     public RoomController(
             RoomService roomService,
@@ -46,13 +48,15 @@ public class RoomController {
             RoomParticipantMapper roomParticipantMapper,
             UserMapper userMapper,
             UserEquippedCosmeticMapper userEquippedCosmeticMapper,
-            ConsumableService consumableService) {
+            ConsumableService consumableService,
+            FriendWatchService friendWatchService) {
         this.roomService = roomService;
         this.sessionJwtService = sessionJwtService;
         this.roomParticipantMapper = roomParticipantMapper;
         this.userMapper = userMapper;
         this.userEquippedCosmeticMapper = userEquippedCosmeticMapper;
         this.consumableService = consumableService;
+        this.friendWatchService = friendWatchService;
     }
 
     /**
@@ -93,6 +97,50 @@ public class RoomController {
     /**
      * 加入房间：POST /api/rooms/join，参数为 roomId（URL 查询参数或 form 均可）
      */
+    /**
+     * 好友在 PVP 对局中时，为当前登录用户发放观战票（与残局房房主旁观不同）；连 WS 时用 watchToken 作 token 参数。
+     */
+    @PostMapping("/friend-watch")
+    public ResponseEntity<?> friendWatch(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam("peerUserId") long peerUserId) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录（需 Authorization: Bearer sessionToken）"));
+        }
+        FriendWatchService.IssueOutcome out =
+                friendWatchService.issueForPeer(uid.get(), peerUserId);
+        switch (out.result) {
+            case OK:
+                return ResponseEntity.ok(out.ok);
+            case NOT_FRIENDS:
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ApiError("NOT_FRIENDS", "仅可观看好友对局"));
+            case NOT_IN_GAME:
+            case ROOM_GONE:
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(
+                                new ApiError(
+                                        "NOT_IN_GAME", "该好友当前不在可观看的对局中"));
+            case GAME_OVER:
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(new ApiError("GAME_OVER", "对局已结束"));
+            case PUZZLE_NOT_SUPPORTED:
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(
+                                new ApiError(
+                                        "PUZZLE_NOT_SUPPORTED", "该类型对局暂不支持从好友列表观战"));
+            case IS_PLAYER_USE_SEAT:
+            case WATCHER_IS_PEER:
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new ApiError("BAD_REQUEST", "无法观战本局（您已在座位中）"));
+            default:
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(new ApiError("ERROR", "申请观战失败"));
+        }
+    }
+
     @PostMapping("/join")
     public ResponseEntity<?> join(
             @RequestHeader(value = "Authorization", required = false) String authorization,

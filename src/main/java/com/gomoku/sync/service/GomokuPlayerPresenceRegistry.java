@@ -42,31 +42,38 @@ public class GomokuPlayerPresenceRegistry {
      * 已终局或房间已释放时清掉脏登记并返回 false。
      */
     public boolean isPeerInActiveGame(long peerUserId) {
+        return findActiveRoomIdForPlayer(peerUserId) != null;
+    }
+
+    /**
+     * 好友观战：若该用户为某未终局房间内的黑/白棋手，返回房间 id，否则 null（并尽量清脏登记）。
+     */
+    public String findActiveRoomIdForPlayer(long peerUserId) {
         if (peerUserId <= 0) {
-            return false;
+            return null;
         }
         String roomId = userIdToRoomId.get(peerUserId);
         if (roomId == null) {
-            return false;
+            return null;
         }
         GameRoom room = roomService.getRoom(roomId);
         if (room == null) {
             userIdToRoomId.remove(peerUserId);
-            return false;
+            return null;
         }
         if (room.isGameOver()) {
             userIdToRoomId.remove(peerUserId);
-            return false;
+            return null;
         }
         long black = room.getBlackUserId();
         Long white = room.getWhiteUserId();
         if (peerUserId == black) {
-            return true;
+            return roomId;
         }
         if (white != null && peerUserId == white) {
-            return true;
+            return roomId;
         }
         userIdToRoomId.remove(peerUserId);
-        return false;
+        return null;
     }
 }

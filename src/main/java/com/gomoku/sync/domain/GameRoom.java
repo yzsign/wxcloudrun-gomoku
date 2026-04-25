@@ -92,6 +92,13 @@ public class GameRoom {
     private WebSocketSession spectatorSession;
 
     /**
+     * 非残局房：好友持此 token 与 session 可连一条观战 WebSocket（与棋手座 black/white token 分离）。
+     */
+    private String friendWatchToken;
+
+    private WebSocketSession friendWatchSession;
+
+    /**
      * 残局好友房：邀请时的盘面与下一手；好友首次连白方 WS 时 {@link #tryApplyPuzzleFriendJoinResetOnce()} 可恢复至此（与
      * puzzleTemplate 一致；HTTP 加入时已 {@link #restoreLiveStateFromPuzzleTemplate(boolean)} 则跳过）。
      */
@@ -1321,6 +1328,22 @@ public class GameRoom {
 
     public void setSpectatorSession(WebSocketSession spectatorSession) {
         this.spectatorSession = spectatorSession;
+    }
+
+    public String getFriendWatchToken() {
+        return friendWatchToken;
+    }
+
+    public void setFriendWatchToken(String friendWatchToken) {
+        this.friendWatchToken = friendWatchToken;
+    }
+
+    public WebSocketSession getFriendWatchSession() {
+        return friendWatchSession;
+    }
+
+    public void setFriendWatchSession(WebSocketSession friendWatchSession) {
+        this.friendWatchSession = friendWatchSession;
     }
 
     /** 建局并 hydrate 后调用：保存邀请时的残局快照，供好友进房重置。 */

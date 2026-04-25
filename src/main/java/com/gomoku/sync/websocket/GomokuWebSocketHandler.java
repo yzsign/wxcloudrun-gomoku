@@ -8,6 +8,7 @@ import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomChatMessage;
 import com.gomoku.sync.domain.Stone;
+import com.gomoku.sync.mapper.SocialFriendshipMapper;
 import com.gomoku.sync.service.GomokuPlayerPresenceRegistry;
 import com.gomoku.sync.service.PieceSkinSelectionService;
 import com.gomoku.sync.service.RoomChatService;
@@ -39,6 +40,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private static final String ATTR_ROOM = "room";
     private static final String ATTR_COLOR = "color";
     private static final String ATTR_SPECTATOR = "spectator";
+    private static final String ATTR_FRIEND_WATCH = "friendWatch";
     private static final String ATTR_USER_ID = "userId";
 
     private final RoomService roomService;
@@ -49,6 +51,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private final SessionJwtService sessionJwtService;
     private final PieceSkinSelectionService pieceSkinSelectionService;
     private final RoomChatService roomChatService;
+    private final SocialFriendshipMapper socialFriendshipMapper;
     private final ScheduledExecutorService botScheduler;
     /** 人机落子延迟任务，同房间新调度会取消旧任务 */
     private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotMoves = new ConcurrentHashMap<>();
@@ -68,6 +71,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             SessionJwtService sessionJwtService,
             PieceSkinSelectionService pieceSkinSelectionService,
             RoomChatService roomChatService,
+            SocialFriendshipMapper socialFriendshipMapper,
             ScheduledExecutorService gomokuBotScheduler) {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
@@ -77,6 +81,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         this.sessionJwtService = sessionJwtService;
         this.pieceSkinSelectionService = pieceSkinSelectionService;
         this.roomChatService = roomChatService;
+        this.socialFriendshipMapper = socialFriendshipMapper;
         this.botScheduler = gomokuBotScheduler;
     }
 
@@ -131,6 +136,44 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                     return;
                 }
                 room.setSpectatorSession(session);
+            }
+            roomSessionTracker.register(roomId);
+            roomGameStateService.syncRoomFromDbIfBehind(room);
+            applyOnlineClockTimeouts(room);
+            broadcastState(room);
+            maybePlayBot(room);
+            return;
+        }
+
+        boolean friendWatch =
+                !room.isPuzzleRoom()
+                        && room.getFriendWatchToken() != null
+                        && room.getFriendWatchToken().equals(token);
+        if (friendWatch) {
+            long uid = userId.get();
+            long blackU = room.getBlackUserId();
+            Long whiteU = room.getWhiteUserId();
+            if (uid == blackU || (whiteU != null && uid == whiteU)) {
+                sendError(session, "对弈请用棋手座连接");
+                session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
+                return;
+            }
+            if (!isFriendWith(uid, blackU) && (whiteU == null || !isFriendWith(uid, whiteU))) {
+                sendError(session, "非好友对局，无法观战");
+                session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
+                return;
+            }
+            roomGameStateService.syncRoomFromDbIfBehind(room);
+            session.getAttributes().put(ATTR_ROOM, room);
+            session.getAttributes().put(ATTR_SPECTATOR, Boolean.TRUE);
+            session.getAttributes().put(ATTR_FRIEND_WATCH, Boolean.TRUE);
+            synchronized (room) {
+                if (room.getFriendWatchSession() != null && room.getFriendWatchSession().isOpen()) {
+                    sendError(session, "观战位已有连接");
+                    session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
+                    return;
+                }
+                room.setFriendWatchSession(session);
             }
             roomSessionTracker.register(roomId);
             roomGameStateService.syncRoomFromDbIfBehind(room);
@@ -296,6 +339,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
         WebSocketSession sp = room.getSpectatorSession();
+        WebSocketSession fw = room.getFriendWatchSession();
         if (bs != null && bs.isOpen()) {
             sendToSession(bs, msg);
         }
@@ -304,6 +348,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
         if (sp != null && sp.isOpen()) {
             sendToSession(sp, msg);
+        }
+        if (fw != null && fw.isOpen()) {
+            sendToSession(fw, msg);
         }
     }
 
@@ -1097,6 +1144,21 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
+        if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_FRIEND_WATCH))) {
+            GameRoom rfw = (GameRoom) session.getAttributes().get(ATTR_ROOM);
+            if (rfw == null) {
+                return;
+            }
+            synchronized (rfw) {
+                if (rfw.getFriendWatchSession() == session) {
+                    rfw.setFriendWatchSession(null);
+                }
+            }
+            roomGameStateService.tryPersist(rfw);
+            roomSessionTracker.unregister(rfw.getRoomId());
+            broadcastState(rfw);
+            return;
+        }
         if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
             GameRoom room = (GameRoom) session.getAttributes().get(ATTR_ROOM);
             if (room == null) {
@@ -1143,6 +1205,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
         WebSocketSession sp = room.getSpectatorSession();
+        WebSocketSession fw = room.getFriendWatchSession();
         if (bs != null && bs.isOpen()) {
             sendToSession(bs, stateJson(room, Stone.BLACK, false));
         }
@@ -1151,6 +1214,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
         if (sp != null && sp.isOpen()) {
             sendToSession(sp, stateJson(room, Stone.BLACK, true));
+        }
+        if (fw != null && fw.isOpen()) {
+            sendToSession(fw, stateJson(room, Stone.BLACK, true));
         }
     }
 
@@ -1261,5 +1327,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private static String first(List<String> list) {
         return (list == null || list.isEmpty()) ? null : list.get(0);
+    }
+
+    private boolean isFriendWith(long userA, long userB) {
+        if (userA == userB) {
+            return true;
+        }
+        long low = Math.min(userA, userB);
+        long high = Math.max(userA, userB);
+        return socialFriendshipMapper.existsPair(low, high) > 0;
     }
 }
