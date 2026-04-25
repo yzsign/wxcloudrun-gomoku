@@ -71,7 +71,7 @@ public class MeDailyPuzzleController {
     }
 
     /**
-     * 创建残局好友房：返回 roomId、房主执黑 token、旁观 token；好友 POST /api/rooms/join 执白。
+     * 创建残局好友房：返回 roomId、房主执黑 token、观战 token；好友 POST /api/rooms/join 执白。
      * 新房主应使用 blackToken 连 WebSocket；好友首次连上白方时服务端将棋盘重置为邀请时残局与下一手。
      */
     @PostMapping("/puzzle-friend-room")

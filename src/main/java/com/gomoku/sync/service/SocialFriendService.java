@@ -10,6 +10,7 @@ import com.gomoku.sync.mapper.SocialFriendRemarkMapper;
 import com.gomoku.sync.mapper.SocialFriendRequestMapper;
 import com.gomoku.sync.mapper.SocialFriendshipMapper;
 import com.gomoku.sync.mapper.UserMapper;
+import com.gomoku.sync.service.rating.RatingTitleUtil;
 import com.gomoku.sync.websocket.UserWebSocketRegistry;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -244,16 +245,23 @@ public class SocialFriendService {
         for (FriendListItemDto row : rows) {
             boolean inGame = gomokuPlayerPresenceRegistry.isPeerInActiveGame(row.getPeerUserId());
             row.setInGame(inGame);
+            boolean spectating =
+                    !inGame && gomokuPlayerPresenceRegistry.isPeerSpectating(row.getPeerUserId());
+            row.setSpectating(spectating);
             boolean userSocialWs =
                     userWebSocketRegistry
                             .getSession(row.getPeerUserId())
                             .map(WebSocketSession::isOpen)
                             .orElse(false);
-            // 对局中必然「活跃」；仅用户 /ws/user 在好友列表里也记为 online
-            row.setOnline(userSocialWs || inGame);
+            // 对局/观战中必然「活跃」；仅用户 /ws/user 在好友列表里也记为 online
+            row.setOnline(userSocialWs || inGame || spectating);
             String nick = row.getNickname() != null ? row.getNickname() : "";
             String rem = row.getRemark() != null ? row.getRemark().trim() : "";
             row.setDisplayName(rem.isEmpty() ? nick : rem);
+            if (row.getTitleName() == null || row.getTitleName().isEmpty()) {
+                int e = row.getEloScore() != null ? row.getEloScore() : 1200;
+                row.setTitleName(RatingTitleUtil.titleNameForElo(e));
+            }
         }
         return rows;
     }

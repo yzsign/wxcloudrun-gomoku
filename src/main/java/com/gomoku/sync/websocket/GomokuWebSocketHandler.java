@@ -137,12 +137,13 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             session.getAttributes().put(ATTR_USER_ID, userId.get());
             synchronized (room) {
                 if (room.getSpectatorSession() != null && room.getSpectatorSession().isOpen()) {
-                    sendError(session, "旁观已有连接");
+                    sendError(session, "观战已有连接");
                     session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
                     return;
                 }
                 room.addSpectator(userId.get(), session);
             }
+            gomokuPlayerPresenceRegistry.registerSpectating(userId.get(), roomId);
             roomSessionTracker.register(roomId);
             roomGameStateService.syncRoomFromDbIfBehind(room);
             applyOnlineClockTimeouts(room);
@@ -175,13 +176,15 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             session.getAttributes().put(ATTR_FRIEND_WATCH, Boolean.TRUE);
             session.getAttributes().put(ATTR_USER_ID, uid);
             synchronized (room) {
-                if (room.getFriendWatchSession() != null && room.getFriendWatchSession().isOpen()) {
-                    sendError(session, "观战位已有连接");
+                WebSocketSession already = room.getSpectatorSession(uid);
+                if (already != null && already.isOpen()) {
+                    sendError(session, "该账号已有一条观战连接，请先关闭");
                     session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
                     return;
                 }
                 room.addSpectator(uid, session);
             }
+            gomokuPlayerPresenceRegistry.registerSpectating(uid, roomId);
             roomSessionTracker.register(roomId);
             roomGameStateService.syncRoomFromDbIfBehind(room);
             applyOnlineClockTimeouts(room);
@@ -341,7 +344,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         return -1L;
     }
 
-    /** 对局双方与所有旁观者均收到 */
+    /** 对局双方与所有观战者均收到 */
     private void broadcastChat(GameRoom room, TextMessage msg) {
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
@@ -1153,6 +1156,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_FRIEND_WATCH))
                 || Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
             GameRoom room = (GameRoom) session.getAttributes().get(ATTR_ROOM);
+            Long specUid = (Long) session.getAttributes().get(ATTR_USER_ID);
+            if (specUid != null) {
+                gomokuPlayerPresenceRegistry.unregisterSpectating(specUid);
+            }
             if (room == null) {
                 return;
             }
@@ -1192,6 +1199,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     public void broadcastState(GameRoom room) {
+        if (room.syncFriendRoomClockPauseForLiveSeats()) {
+            roomGameStateService.tryPersist(room);
+        }
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
         if (bs != null && bs.isOpen()) {
@@ -1200,7 +1210,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         if (ws != null && ws.isOpen()) {
             sendToSession(ws, stateJson(room, Stone.WHITE, false));
         }
-        // 所有旁观连接（含 puzzle 旁观 + 多名好友观战），避免仅 legacy 两槽导致多旁观收不到 STATE
+        // 所有观战连接（含 puzzle 房观战 + 多名好友观战），避免仅 legacy 两槽导致多观战端收不到 STATE
         for (long uid : room.getSpectatorUserIds()) {
             WebSocketSession s = room.getSpectatorSession(uid);
             if (s != null && s.isOpen()) {

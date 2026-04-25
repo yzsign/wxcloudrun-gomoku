@@ -36,6 +36,9 @@ public class RoomGameStatePollTask {
                 continue;
             }
             boolean dbNewer = roomGameStateService.pollApplyIfNewer(roomId, room);
+            if (room.syncFriendRoomClockPauseForLiveSeats()) {
+                roomGameStateService.tryPersist(room);
+            }
             if (room.applyClockTimeoutsIfDue()) {
                 roomGameStateService.tryPersist(room);
                 gomokuWebSocketHandler.broadcastState(room);

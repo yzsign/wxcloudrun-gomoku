@@ -91,7 +91,17 @@ public class GameRoom {
 
     private volatile boolean clusterWhiteConnected;
 
-    /** 残局好友房：房主用 observerToken 旁观；黑方行棋若无人连黑座则顺延读秒 */
+    /**
+     * 随机匹配为 true，POST 好友开房为 false，与 room_participants.random_match 一致；内存失载时于 buildRoom 恢复。
+     */
+    private boolean randomMatch;
+
+    /**
+     * 好友 PvP：双方真人均曾同时在线（与 STATE 黑/白“在位”判断一致，含集群连接）；为 true 后不因单方断线再进入「等好友进房」式读秒暂停。
+     */
+    private boolean friendBothHumanSeatsLiveOnce;
+
+    /** 残局好友房：房主用 observerToken 观战；黑方行棋若无人连黑座则顺延读秒 */
     private boolean puzzleRoom;
     private String spectatorToken;
     private long observerUserId;
@@ -236,6 +246,59 @@ public class GameRoom {
         lock.lock();
         try {
             return clockPauseStartedWallMs > 0L;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public boolean isRandomMatch() {
+        return randomMatch;
+    }
+
+    public void setRandomMatch(boolean randomMatch) {
+        this.randomMatch = randomMatch;
+    }
+
+    /**
+     * 非随机、非残局：在双方未同时「在位」时暂停读秒；曾同时在线后不因单方断线再进入该暂停（与客户端 onlineFriendBothEverConnected 一致）。
+     *
+     * @return 若与持久化快照相关的时钟或好友位标志有变化则为 true
+     */
+    public boolean syncFriendRoomClockPauseForLiveSeats() {
+        lock.lock();
+        try {
+            long snapMove = clockMoveDeadlineWallMs;
+            long snapGame = clockGameDeadlineWallMs;
+            long snapPause = clockPauseStartedWallMs;
+            boolean snapFriend = friendBothHumanSeatsLiveOnce;
+            if (gameOver || puzzleRoom || randomMatch) {
+                return false;
+            }
+            if (pendingUndoRequesterColor != null || pendingDrawRequesterColor != null) {
+                return false;
+            }
+            boolean blackHere =
+                    blackIsBot
+                            || (blackSession != null && blackSession.isOpen())
+                            || clusterBlackConnected;
+            boolean whiteHere =
+                    whiteIsBot
+                            || (whiteSession != null && whiteSession.isOpen())
+                            || clusterWhiteConnected;
+            if (blackHere && whiteHere) {
+                if (!friendBothHumanSeatsLiveOnce) {
+                    friendBothHumanSeatsLiveOnce = true;
+                    endClockPauseExtendBothDeadlines();
+                }
+            } else if (friendBothHumanSeatsLiveOnce) {
+                return false;
+            } else {
+                startClockPause();
+            }
+            return snapMove != clockMoveDeadlineWallMs
+                    || snapGame != clockGameDeadlineWallMs
+                    || snapPause != clockPauseStartedWallMs
+                    || snapFriend != friendBothHumanSeatsLiveOnce;
         } finally {
             lock.unlock();
         }
@@ -1232,6 +1295,7 @@ public class GameRoom {
             s.setClockMoveDeadlineWallMs(clockMoveDeadlineWallMs);
             s.setClockGameDeadlineWallMs(clockGameDeadlineWallMs);
             s.setClockPauseStartedWallMs(clockPauseStartedWallMs);
+            s.setFriendBothHumanSeatsLiveOnce(friendBothHumanSeatsLiveOnce);
             s.setGameEndReason(gameEndReason);
             List<GameRoomStateSnapshot.MoveRecord> list = new ArrayList<>();
             for (RecordedMove m : moveHistory) {
@@ -1277,12 +1341,16 @@ public class GameRoom {
             clockMoveDeadlineWallMs = snap.getClockMoveDeadlineWallMs();
             clockGameDeadlineWallMs = snap.getClockGameDeadlineWallMs();
             clockPauseStartedWallMs = snap.getClockPauseStartedWallMs();
+            friendBothHumanSeatsLiveOnce = snap.isFriendBothHumanSeatsLiveOnce();
             gameEndReason = snap.getGameEndReason();
             moveHistory.clear();
             if (snap.getMoves() != null) {
                 for (GameRoomStateSnapshot.MoveRecord m : snap.getMoves()) {
                     moveHistory.addLast(new RecordedMove(m.r, m.c, m.color));
                 }
+            }
+            if (!friendBothHumanSeatsLiveOnce && (!moveHistory.isEmpty() || countStones() > 0)) {
+                friendBothHumanSeatsLiveOnce = true;
             }
             ensureClockDeadlinesFromSnapshot();
         } finally {

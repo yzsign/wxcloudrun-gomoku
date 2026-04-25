@@ -16,6 +16,7 @@ import com.gomoku.sync.mapper.RoomParticipantMapper;
 import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.service.rating.DailyEloCap;
 import com.gomoku.sync.service.rating.EloRatingCalculator;
+import com.gomoku.sync.service.rating.RatingTitleUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -349,6 +350,8 @@ public class RatingSettlementService {
                 pfNew[0],
                 pfNew[1]);
 
+        RatingTitleUtil.applyTitleNameFromElo(black);
+        RatingTitleUtil.applyTitleNameFromElo(white);
         userMapper.updateRatingProfile(black);
         userMapper.updateRatingProfile(white);
 

@@ -26,6 +26,12 @@ public interface RoomParticipantMapper {
             @Param("whiteToken") String whiteToken);
 
     /**
+     * 未设置观战票时写入，供多实例下 WS 节点从 DB 恢复一致；仅影响 NULL/空 行，返回 0 表示他处已设置。
+     */
+    int updateFriendWatchTokenIfNull(
+            @Param("roomId") String roomId, @Param("token") String token);
+
+    /**
      * 残局好友房：下一手为黑时好友入座黑方、白方为人机（原黑座为房主占位，须与 observer 一致）。
      */
     int updatePuzzleJoinFriendAsBlack(

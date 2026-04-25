@@ -10,13 +10,15 @@ public class RoomParticipant {
     private String blackToken;
     private Long whiteUserId;
     private String whiteToken;
+    /** 非残局 PvP 好友观战，与 Gomoku WS token 参数一致；多实例时须持久化 */
+    private String friendWatchToken;
     private boolean whiteIsBot;
     private boolean blackIsBot;
     private Integer botSearchDepthMin;
     private Integer botSearchDepthMax;
     /** 人机棋风，见 BotAiStyle.ordinal；NULL 表示由 white_user_id 推导 */
     private Integer botAiStyle;
-    /** 与 black 同用户时可仅连旁观 WS；NULL 表示非残局好友房 */
+    /** 与 black 同用户时可仅连观战 WS；NULL 表示非残局好友房 */
     private Long observerUserId;
     private String observerToken;
     private boolean puzzleRoom;
@@ -64,6 +66,14 @@ public class RoomParticipant {
 
     public void setWhiteToken(String whiteToken) {
         this.whiteToken = whiteToken;
+    }
+
+    public String getFriendWatchToken() {
+        return friendWatchToken;
+    }
+
+    public void setFriendWatchToken(String friendWatchToken) {
+        this.friendWatchToken = friendWatchToken;
     }
 
     public boolean isWhiteIsBot() {

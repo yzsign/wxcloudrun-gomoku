@@ -16,6 +16,7 @@
         <result property="gender" column="gender"/>
         <result property="pieceSkinId" column="piece_skin_id"/>
         <result property="eloScore" column="elo_score"/>
+        <result property="titleName" column="title_name"/>
         <result property="activityPoints" column="activity_points"/>
         <result property="consecutiveWins" column="consecutive_wins"/>
         <result property="consecutiveLosses" column="consecutive_losses"/>
@@ -97,6 +98,7 @@
     <update id="updateRatingProfile">
         UPDATE users
         SET elo_score = #{eloScore},
+            title_name = #{titleName},
             activity_points = #{activityPoints},
             consecutive_wins = #{consecutiveWins},
             consecutive_losses = #{consecutiveLosses},

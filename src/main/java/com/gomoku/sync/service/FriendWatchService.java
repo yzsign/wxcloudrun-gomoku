@@ -4,8 +4,6 @@ import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.mapper.SocialFriendshipMapper;
 import org.springframework.stereotype.Service;
 
-import java.util.UUID;
-
 /**
  * 为好友列表「观战」：非残局 PVP 房下发一次性观战票；WebSocket 用 friendWatchToken 与好友关系验证。
  */
@@ -81,9 +79,7 @@ public class FriendWatchService {
                 || (room.getWhiteUserId() != null && viewerUserId == room.getWhiteUserId())) {
             return new IssueOutcome(IssueResult.IS_PLAYER_USE_SEAT, null);
         }
-        if (room.getFriendWatchToken() == null) {
-            room.setFriendWatchToken(UUID.randomUUID().toString());
-        }
+        roomService.ensureFriendWatchTokenInMemoryAndDb(room);
         return new IssueOutcome(
                 IssueResult.OK,
                 new com.gomoku.sync.api.dto.FriendWatchTicketResponse(

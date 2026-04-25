@@ -1,7 +1,7 @@
 package com.gomoku.sync.api.dto;
 
 /**
- * 创建残局好友房：当前盘面与下一手方（好友入座白方，房主旁观）。
+ * 创建残局好友房：当前盘面与下一手方（好友入座白方，房主观战）。
  */
 public class PuzzleFriendRoomRequest {
 

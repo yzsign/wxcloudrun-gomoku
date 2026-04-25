@@ -40,6 +40,10 @@ public class GameRoomStateSnapshot {
     /** 非 0 表示因悔棋/和棋申请而暂停读秒，值为暂停开始时刻 */
     private long clockPauseStartedWallMs;
     /**
+     * 好友房：双方真人均曾同时在线后不因单方断线再进入「等好友」读秒暂停（与 room 一致；旧快照无此字段时由盘面/手顺推断）。
+     */
+    private boolean friendBothHumanSeatsLiveOnce;
+    /**
      * 终局原因：null 或空为普通终局；TIME_DRAW=总时限和棋；MOVE_TIMEOUT=当前行棋方思考超时负。
      */
     private String gameEndReason;
@@ -62,6 +66,7 @@ public class GameRoomStateSnapshot {
         s.clockMoveDeadlineWallMs = 0L;
         s.clockGameDeadlineWallMs = 0L;
         s.clockPauseStartedWallMs = 0L;
+        s.friendBothHumanSeatsLiveOnce = false;
         s.gameEndReason = null;
         return s;
     }
@@ -192,6 +197,14 @@ public class GameRoomStateSnapshot {
 
     public void setClockPauseStartedWallMs(long clockPauseStartedWallMs) {
         this.clockPauseStartedWallMs = clockPauseStartedWallMs;
+    }
+
+    public boolean isFriendBothHumanSeatsLiveOnce() {
+        return friendBothHumanSeatsLiveOnce;
+    }
+
+    public void setFriendBothHumanSeatsLiveOnce(boolean friendBothHumanSeatsLiveOnce) {
+        this.friendBothHumanSeatsLiveOnce = friendBothHumanSeatsLiveOnce;
     }
 
     public String getGameEndReason() {

@@ -9,6 +9,7 @@
         <result property="blackToken" column="black_token"/>
         <result property="whiteUserId" column="white_user_id"/>
         <result property="whiteToken" column="white_token"/>
+        <result property="friendWatchToken" column="friend_watch_token"/>
         <result property="whiteIsBot" column="white_is_bot"/>
         <result property="blackIsBot" column="black_is_bot"/>
         <result property="botSearchDepthMin" column="bot_search_depth_min"/>
@@ -68,6 +69,13 @@
         WHERE room_id = #{roomId}
     </update>
 
+    <update id="updateFriendWatchTokenIfNull">
+        UPDATE room_participants
+        SET friend_watch_token = #{token}
+        WHERE room_id = #{roomId}
+          AND (friend_watch_token IS NULL OR friend_watch_token = '')
+    </update>
+
     <update id="updateBotMeta">
         UPDATE room_participants
         SET white_is_bot = #{whiteIsBot},
@@ -88,7 +96,7 @@
     </update>
 
     <select id="selectByRoomId" resultMap="RoomParticipantResult">
-        SELECT room_id, black_user_id, black_token, white_user_id, white_token,
+        SELECT room_id, black_user_id, black_token, white_user_id, white_token, friend_watch_token,
                white_is_bot, black_is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style,
                observer_user_id, observer_token, puzzle_room, random_match, puzzle_init_board_json, puzzle_side_to_move
         FROM room_participants

@@ -5,7 +5,7 @@ public class PuzzleFriendRoomResponse {
     private final String roomId;
     /** 房主执黑连 WebSocket；好友 POST /join 执白 */
     private final String blackToken;
-    /** 仍可用于仅旁观（旧客户端）；新房主应优先用 blackToken 对弈 */
+    /** 仍可用于仅观战（旧客户端）；新房主应优先用 blackToken 对弈 */
     private final String spectatorToken;
     private final int boardSize;
 

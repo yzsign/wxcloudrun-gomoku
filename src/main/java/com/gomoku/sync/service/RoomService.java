@@ -42,6 +42,25 @@ public class RoomService {
         return boardSize;
     }
 
+    /**
+     * 确保好友观战票存在并写入 DB：多实例下 WS 与 HTTP 可落在不同节点，仅内存的 token 会导致鉴权失败。
+     * 用「仅当列为空时更新」减少并发下重复 UUID；若本实例未获写锁则从 DB 再读入内存。
+     */
+    public void ensureFriendWatchTokenInMemoryAndDb(GameRoom room) {
+        if (room.getFriendWatchToken() != null && !room.getFriendWatchToken().isEmpty()) {
+            return;
+        }
+        String t = UUID.randomUUID().toString();
+        if (roomParticipantMapper.updateFriendWatchTokenIfNull(room.getRoomId(), t) == 1) {
+            room.setFriendWatchToken(t);
+            return;
+        }
+        RoomParticipant rp = roomParticipantMapper.selectByRoomId(room.getRoomId());
+        if (rp != null && rp.getFriendWatchToken() != null && !rp.getFriendWatchToken().isEmpty()) {
+            room.setFriendWatchToken(rp.getFriendWatchToken());
+        }
+    }
+
     public GameRoom createRoom(long blackUserId) {
         return createRoom(blackUserId, false);
     }
@@ -53,6 +72,7 @@ public class RoomService {
         String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String blackToken = UUID.randomUUID().toString();
         GameRoom room = new GameRoom(roomId, boardSize, blackToken, blackUserId);
+        room.setRandomMatch(randomMatch);
         rooms.put(roomId, room);
         try {
             roomParticipantMapper.insertBlack(roomId, blackUserId, blackToken, randomMatch);
@@ -65,7 +85,7 @@ public class RoomService {
     }
 
     /**
-     * 残局好友房：房主与 DB 黑方为同一用户，房主使用 {@link GameRoom#getSpectatorToken()} 旁观；
+     * 残局好友房：房主与 DB 黑方为同一用户，房主使用 {@link GameRoom#getSpectatorToken()} 观战；
      * 好友通过 {@link #joinRoom(String, long)} 入座白方。
      */
     public GameRoom createPuzzleFriendRoom(long creatorUserId, int[][] board, int sideToMove) {
@@ -127,6 +147,10 @@ public class RoomService {
     private GameRoom buildRoomFromParticipant(RoomParticipant rp) {
         GameRoom room =
                 new GameRoom(rp.getRoomId(), boardSize, rp.getBlackToken(), rp.getBlackUserId());
+        room.setRandomMatch(rp.isRandomMatch());
+        if (rp.getFriendWatchToken() != null && !rp.getFriendWatchToken().isEmpty()) {
+            room.setFriendWatchToken(rp.getFriendWatchToken());
+        }
         if (rp.getWhiteToken() != null
                 && !rp.getWhiteToken().isEmpty()
                 && rp.getWhiteUserId() != null) {

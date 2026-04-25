@@ -24,6 +24,8 @@
             u.nickname AS nickname,
             u.avatar_url AS avatarUrl,
             u.gender AS gender,
+            u.elo_score AS eloScore,
+            u.title_name AS titleName,
             COALESCE(r.remark, '') AS remark
         FROM social_friendship f
         INNER JOIN users u ON u.id = CASE

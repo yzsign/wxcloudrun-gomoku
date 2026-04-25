@@ -212,7 +212,7 @@ public class RoomChatService {
         return rp.getObserverUserId() != null && uid == rp.getObserverUserId();
     }
 
-    /** 棋手（不含旁观） */
+    /** 棋手（不含观战） */
     private static boolean isRoomPlayer(RoomParticipant rp, long uid) {
         if (uid == rp.getBlackUserId()) {
             return true;

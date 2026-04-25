@@ -24,6 +24,11 @@ public class User {
     /** 当前佩戴棋子皮肤 id（如 basic、tuan_moe、qingtao_libai）；null 表示未同步或未设置 */
     private String pieceSkinId;
     private int eloScore = 1200;
+    /**
+     * 与 rule.md §5 一致；在 elo 变更时由 {@link com.gomoku.sync.service.rating.RatingTitleUtil} 与 DB
+     * 同步。勿单独改 elo 而不更新本字段，除非经 rating 更新路径落库。
+     */
+    private String titleName;
     private int activityPoints;
     private int consecutiveWins;
     private int consecutiveLosses;
@@ -137,6 +142,14 @@ public class User {
 
     public void setEloScore(int eloScore) {
         this.eloScore = eloScore;
+    }
+
+    public String getTitleName() {
+        return titleName;
+    }
+
+    public void setTitleName(String titleName) {
+        this.titleName = titleName;
     }
 
     public int getActivityPoints() {

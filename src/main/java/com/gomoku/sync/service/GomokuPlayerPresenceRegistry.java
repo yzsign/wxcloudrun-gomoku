@@ -16,6 +16,8 @@ public class GomokuPlayerPresenceRegistry {
 
     private final RoomService roomService;
     private final ConcurrentHashMap<Long, String> userIdToRoomId = new ConcurrentHashMap<>();
+    /** 观战 Gomoku WS 已建连的 userId -> roomId（与棋手登记 {@link #userIdToRoomId} 互斥使用） */
+    private final ConcurrentHashMap<Long, String> spectatorUserIdToRoomId = new ConcurrentHashMap<>();
 
     public GomokuPlayerPresenceRegistry(RoomService roomService) {
         this.roomService = roomService;
@@ -35,6 +37,49 @@ public class GomokuPlayerPresenceRegistry {
             return;
         }
         userIdToRoomId.remove(userId);
+    }
+
+    /** 观战 WS 建连后登记，供好友列表「观战中」 */
+    public void registerSpectating(long userId, @NonNull String roomId) {
+        if (userId <= 0 || roomId.isEmpty()) {
+            return;
+        }
+        spectatorUserIdToRoomId.put(userId, roomId);
+    }
+
+    public void unregisterSpectating(long userId) {
+        if (userId <= 0) {
+            return;
+        }
+        spectatorUserIdToRoomId.remove(userId);
+    }
+
+    /**
+     * 好友列表：对方是否以观战身份挂在本进程某未终局房间的 Gomoku WS 上。
+     * 房间终局/释放时清脏并返回 false。
+     */
+    public boolean isPeerSpectating(long peerUserId) {
+        if (peerUserId <= 0) {
+            return false;
+        }
+        String roomId = spectatorUserIdToRoomId.get(peerUserId);
+        if (roomId == null) {
+            return false;
+        }
+        GameRoom room = roomService.getRoom(roomId);
+        if (room == null) {
+            spectatorUserIdToRoomId.remove(peerUserId);
+            return false;
+        }
+        if (room.isGameOver()) {
+            spectatorUserIdToRoomId.remove(peerUserId);
+            return false;
+        }
+        if (!room.getSpectatorUserIds().contains(peerUserId)) {
+            spectatorUserIdToRoomId.remove(peerUserId);
+            return false;
+        }
+        return true;
     }
 
     /**

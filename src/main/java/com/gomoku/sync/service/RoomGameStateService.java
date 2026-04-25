@@ -46,7 +46,7 @@ public class RoomGameStateService {
     }
 
     /**
-     * 残局好友房：写入给定盘面与行棋方（房主旁观，黑座可无 WS）。
+     * 残局好友房：写入给定盘面与行棋方（房主观战，黑座可无 WS）。
      */
     public void insertPuzzleInitial(String roomId, int[][] board, int sideToMove) {
         DailyPuzzleAdminService.validateBoardCells(board, boardSize);
@@ -81,6 +81,7 @@ public class RoomGameStateService {
                 snap.setClockGameDeadlineWallMs(0L);
             }
             snap.setClockPauseStartedWallMs(0L);
+            snap.setFriendBothHumanSeatsLiveOnce(false);
             snap.setGameEndReason(null);
             String json = objectMapper.writeValueAsString(snap);
             roomGameStateMapper.insertInitial(roomId, json);

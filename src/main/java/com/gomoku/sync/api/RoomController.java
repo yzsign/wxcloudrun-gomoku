@@ -21,6 +21,7 @@ import com.gomoku.sync.service.FriendWatchService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
 import com.gomoku.sync.service.SocialFriendService;
+import com.gomoku.sync.service.rating.RatingTitleUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -109,7 +110,7 @@ public class RoomController {
      * 加入房间：POST /api/rooms/join，参数为 roomId（URL 查询参数或 form 均可）
      */
     /**
-     * 好友在 PVP 对局中时，为当前登录用户发放观战票（与残局房房主旁观不同）；连 WS 时用 watchToken 作 token 参数。
+     * 好友在 PVP 对局中时，为当前登录用户发放观战票（与残局房房主观战不同）；连 WS 时用 watchToken 作 token 参数。
      */
     @PostMapping("/friend-watch")
     public ResponseEntity<?> friendWatch(
@@ -297,7 +298,7 @@ public class RoomController {
     }
 
     /**
-     * 获取当前房间内的旁观者展示列表（观战弹窗，复用 FriendListItemDto）。
+     * 获取当前房间内的观战者展示列表（观战弹窗，复用 FriendListItemDto）。
      * 包含：① 在房内且为观战者的好友；② 若当前用户本人正在本房观战，也会列出自己（
      * {@link GameRoom#getSpectatorCount} 含本人，与「仅好友」筛选叠加时若不补本人则会出现「显示 1 人但列表空」）。
      */
@@ -336,6 +337,12 @@ public class RoomController {
                 self.setInGame(false);
                 String nick = me.getNickname() != null ? me.getNickname() : "";
                 self.setDisplayName(nick);
+                self.setEloScore(me.getEloScore());
+                String tnm = me.getTitleName();
+                if (tnm == null || tnm.isEmpty()) {
+                    tnm = RatingTitleUtil.titleNameForElo(me.getEloScore());
+                }
+                self.setTitleName(tnm);
                 spectatorFriends.add(0, self);
             }
         }
