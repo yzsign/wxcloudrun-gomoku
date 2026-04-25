@@ -134,13 +134,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             roomGameStateService.syncRoomFromDbIfBehind(room);
             session.getAttributes().put(ATTR_ROOM, room);
             session.getAttributes().put(ATTR_SPECTATOR, Boolean.TRUE);
+            session.getAttributes().put(ATTR_USER_ID, userId.get());
             synchronized (room) {
                 if (room.getSpectatorSession() != null && room.getSpectatorSession().isOpen()) {
                     sendError(session, "旁观已有连接");
                     session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
                     return;
                 }
-                room.setSpectatorSession(session);
+                room.addSpectator(userId.get(), session);
             }
             roomSessionTracker.register(roomId);
             roomGameStateService.syncRoomFromDbIfBehind(room);
@@ -172,13 +173,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             session.getAttributes().put(ATTR_ROOM, room);
             session.getAttributes().put(ATTR_SPECTATOR, Boolean.TRUE);
             session.getAttributes().put(ATTR_FRIEND_WATCH, Boolean.TRUE);
+            session.getAttributes().put(ATTR_USER_ID, uid);
             synchronized (room) {
                 if (room.getFriendWatchSession() != null && room.getFriendWatchSession().isOpen()) {
                     sendError(session, "观战位已有连接");
                     session.close(Objects.requireNonNull(CloseStatus.NOT_ACCEPTABLE));
                     return;
                 }
-                room.setFriendWatchSession(session);
+                room.addSpectator(uid, session);
             }
             roomSessionTracker.register(roomId);
             roomGameStateService.syncRoomFromDbIfBehind(room);
@@ -339,24 +341,23 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         return -1L;
     }
 
-    /** 对局双方与旁观均收到 */
+    /** 对局双方与所有旁观者均收到 */
     private void broadcastChat(GameRoom room, TextMessage msg) {
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
-        WebSocketSession sp = room.getSpectatorSession();
-        WebSocketSession fw = room.getFriendWatchSession();
         if (bs != null && bs.isOpen()) {
             sendToSession(bs, msg);
         }
         if (ws != null && ws.isOpen()) {
             sendToSession(ws, msg);
         }
-        if (sp != null && sp.isOpen()) {
-            sendToSession(sp, msg);
-        }
-        if (fw != null && fw.isOpen()) {
-            sendToSession(fw, msg);
-        }
+        // Broadcast to all spectators
+        room.getSpectatorUserIds().forEach(uid -> {
+            WebSocketSession s = room.getSpectatorSession(uid);
+            if (s != null && s.isOpen()) {
+                sendToSession(s, msg);
+            }
+        });
     }
 
     /** 调用前须已 {@link RoomGameStateService#syncRoomFromDbIfBehind(GameRoom)} */
@@ -1149,30 +1150,14 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
-        if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_FRIEND_WATCH))) {
-            GameRoom rfw = (GameRoom) session.getAttributes().get(ATTR_ROOM);
-            if (rfw == null) {
-                return;
-            }
-            synchronized (rfw) {
-                if (rfw.getFriendWatchSession() == session) {
-                    rfw.setFriendWatchSession(null);
-                }
-            }
-            roomGameStateService.tryPersist(rfw);
-            roomSessionTracker.unregister(rfw.getRoomId());
-            broadcastState(rfw);
-            return;
-        }
-        if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
+        if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_FRIEND_WATCH))
+                || Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
             GameRoom room = (GameRoom) session.getAttributes().get(ATTR_ROOM);
             if (room == null) {
                 return;
             }
             synchronized (room) {
-                if (room.getSpectatorSession() == session) {
-                    room.setSpectatorSession(null);
-                }
+                room.removeSpectator(session);
             }
             roomGameStateService.tryPersist(room);
             roomSessionTracker.unregister(room.getRoomId());
@@ -1209,19 +1194,18 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     public void broadcastState(GameRoom room) {
         WebSocketSession bs = room.getBlackSession();
         WebSocketSession ws = room.getWhiteSession();
-        WebSocketSession sp = room.getSpectatorSession();
-        WebSocketSession fw = room.getFriendWatchSession();
         if (bs != null && bs.isOpen()) {
             sendToSession(bs, stateJson(room, Stone.BLACK, false));
         }
         if (ws != null && ws.isOpen()) {
             sendToSession(ws, stateJson(room, Stone.WHITE, false));
         }
-        if (sp != null && sp.isOpen()) {
-            sendToSession(sp, stateJson(room, Stone.BLACK, true));
-        }
-        if (fw != null && fw.isOpen()) {
-            sendToSession(fw, stateJson(room, Stone.BLACK, true));
+        // 所有旁观连接（含 puzzle 旁观 + 多名好友观战），避免仅 legacy 两槽导致多旁观收不到 STATE
+        for (long uid : room.getSpectatorUserIds()) {
+            WebSocketSession s = room.getSpectatorSession(uid);
+            if (s != null && s.isOpen()) {
+                sendToSession(s, stateJson(room, Stone.BLACK, true));
+            }
         }
     }
 
@@ -1281,6 +1265,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             n.put("whiteConnected", whiteHere);
             n.put("whiteIsBot", room.isWhiteIsBot());
             n.put("blackIsBot", room.isBlackIsBot());
+            n.put("spectatorCount", room.getSpectatorCount());
             Integer pr = room.getPendingRematchRequesterColor();
             n.put("rematchPending", pr != null);
             if (pr == null) {

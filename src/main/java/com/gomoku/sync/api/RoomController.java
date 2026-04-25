@@ -2,6 +2,7 @@ package com.gomoku.sync.api;
 
 import com.gomoku.sync.api.dto.ApiError;
 import com.gomoku.sync.api.dto.CreateRoomResponse;
+import com.gomoku.sync.api.dto.FriendListItemDto;
 import com.gomoku.sync.api.dto.JoinRoomResponse;
 import com.gomoku.sync.api.dto.RoomResource;
 import com.gomoku.sync.api.dto.UserRatingResponse;
@@ -12,15 +13,18 @@ import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserEquippedCosmetic;
 import com.gomoku.sync.mapper.RoomParticipantMapper;
+import com.gomoku.sync.mapper.SocialFriendshipMapper;
 import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.service.ConsumableService;
 import com.gomoku.sync.service.FriendWatchService;
 import com.gomoku.sync.service.RoomService;
 import com.gomoku.sync.service.SessionJwtService;
+import com.gomoku.sync.service.SocialFriendService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -28,6 +32,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -41,6 +49,7 @@ public class RoomController {
     private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
     private final ConsumableService consumableService;
     private final FriendWatchService friendWatchService;
+    private final SocialFriendService socialFriendService;
 
     public RoomController(
             RoomService roomService,
@@ -49,7 +58,8 @@ public class RoomController {
             UserMapper userMapper,
             UserEquippedCosmeticMapper userEquippedCosmeticMapper,
             ConsumableService consumableService,
-            FriendWatchService friendWatchService) {
+            FriendWatchService friendWatchService,
+            SocialFriendService socialFriendService) {
         this.roomService = roomService;
         this.sessionJwtService = sessionJwtService;
         this.roomParticipantMapper = roomParticipantMapper;
@@ -57,6 +67,7 @@ public class RoomController {
         this.userEquippedCosmeticMapper = userEquippedCosmeticMapper;
         this.consumableService = consumableService;
         this.friendWatchService = friendWatchService;
+        this.socialFriendService = socialFriendService;
     }
 
     /**
@@ -282,6 +293,38 @@ public class RoomController {
                         consumableService.getDaggerCount(opponentId),
                         loveEquipped,
                         consumableService.getLoveCount(opponentId));
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * 获取当前房间的旁观好友列表（用于 spectator mode 的列表弹窗）。
+     * 仅返回与当前用户是好友的旁观者（复用 FriendListItemDto）。
+     * 旁观者自身可查看（如果他们是好友则显示）。
+     */
+    @GetMapping("/{roomId}/spectators")
+    public ResponseEntity<?> getSpectators(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @PathVariable("roomId") String roomId) {
+        Optional<Long> uidOpt = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uidOpt.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录（需 Authorization: Bearer sessionToken）"));
+        }
+        long uid = uidOpt.get();
+        GameRoom room = roomService.getRoom(roomId);
+        if (room == null) {
+            return ResponseEntity.notFound().build();
+        }
+        List<FriendListItemDto> friends = socialFriendService.listFriends(uid);
+        List<Long> spectatorIds = room.getSpectatorUserIds();
+        List<FriendListItemDto> spectatorFriends = new ArrayList<>();
+        for (FriendListItemDto f : friends) {
+            if (spectatorIds.contains(f.getPeerUserId())) {
+                spectatorFriends.add(f);
+            }
+        }
+        Map<String, Object> body = new HashMap<>();
+        body.put("friends", spectatorFriends);
         return ResponseEntity.ok(body);
     }
 }

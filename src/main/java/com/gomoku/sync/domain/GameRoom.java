@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -18,6 +19,8 @@ public class GameRoom {
 
     /** 与 GomokuWebSocketHandler 中会话属性键一致，交换座位后需刷新 */
     private static final String WS_ATTR_COLOR = "color";
+    /** Must match ATTR_USER_ID in GomokuWebSocketHandler */
+    private static final String ATTR_USER_ID = "userId";
 
     private final String roomId;
     private final int size;
@@ -42,6 +45,9 @@ public class GameRoom {
     private WebSocketSession blackSession;
     private WebSocketSession whiteSession;
     private final ReentrantLock lock = new ReentrantLock();
+
+    /** All current spectators (puzzle observer + friend watchers). Keyed by userId for quick lookup. */
+    private final ConcurrentHashMap<Long, WebSocketSession> spectatorSessions = new ConcurrentHashMap<>();
 
     /** 走子顺序（用于悔棋） */
     private final Deque<RecordedMove> moveHistory = new ArrayDeque<>();
@@ -89,6 +95,7 @@ public class GameRoom {
     private boolean puzzleRoom;
     private String spectatorToken;
     private long observerUserId;
+    /** Legacy single spectator session for puzzle rooms (still supported for backward compat). */
     private WebSocketSession spectatorSession;
 
     /**
@@ -96,6 +103,7 @@ public class GameRoom {
      */
     private String friendWatchToken;
 
+    /** Legacy single friend watch session. All spectators are now in spectatorSessions map. */
     private WebSocketSession friendWatchSession;
 
     /**
@@ -1344,6 +1352,54 @@ public class GameRoom {
 
     public void setFriendWatchSession(WebSocketSession friendWatchSession) {
         this.friendWatchSession = friendWatchSession;
+    }
+
+    /**
+     * Add a spectator (puzzle observer or friend watcher). Replaces legacy single-session fields.
+     */
+    public void addSpectator(long userId, WebSocketSession session) {
+        if (userId <= 0 || session == null) {
+            return;
+        }
+        spectatorSessions.put(userId, session);
+        // Maintain legacy fields for backward compatibility with existing code
+        if (isPuzzleRoom() && spectatorSession == null) {
+            spectatorSession = session;
+        } else if (friendWatchSession == null) {
+            friendWatchSession = session;
+        }
+    }
+
+    /**
+     * Remove a spectator session. Cleans legacy fields if matching.
+     */
+    public void removeSpectator(WebSocketSession session) {
+        if (session == null) {
+            return;
+        }
+        Long uid = (Long) session.getAttributes().get(ATTR_USER_ID);
+        if (uid != null) {
+            spectatorSessions.remove(uid);
+        }
+        if (spectatorSession == session) {
+            spectatorSession = null;
+        }
+        if (friendWatchSession == session) {
+            friendWatchSession = null;
+        }
+    }
+
+    public int getSpectatorCount() {
+        return spectatorSessions.size();
+    }
+
+    public List<Long> getSpectatorUserIds() {
+        return new ArrayList<>(spectatorSessions.keySet());
+    }
+
+    /** Get a specific spectator session by userId (for broadcastChat etc). */
+    public WebSocketSession getSpectatorSession(long userId) {
+        return spectatorSessions.get(userId);
     }
 
     /** 建局并 hydrate 后调用：保存邀请时的残局快照，供好友进房重置。 */
