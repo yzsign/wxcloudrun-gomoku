@@ -297,9 +297,9 @@ public class RoomController {
     }
 
     /**
-     * 获取当前房间的旁观好友列表（用于 spectator mode 的列表弹窗）。
-     * 仅返回与当前用户是好友的旁观者（复用 FriendListItemDto）。
-     * 旁观者自身可查看（如果他们是好友则显示）。
+     * 获取当前房间内的旁观者展示列表（观战弹窗，复用 FriendListItemDto）。
+     * 包含：① 在房内且为观战者的好友；② 若当前用户本人正在本房观战，也会列出自己（
+     * {@link GameRoom#getSpectatorCount} 含本人，与「仅好友」筛选叠加时若不补本人则会出现「显示 1 人但列表空」）。
      */
     @GetMapping("/{roomId}/spectators")
     public ResponseEntity<?> getSpectators(
@@ -321,6 +321,22 @@ public class RoomController {
         for (FriendListItemDto f : friends) {
             if (spectatorIds.contains(f.getPeerUserId())) {
                 spectatorFriends.add(f);
+            }
+        }
+        if (spectatorIds.contains(uid)) {
+            User me = userMapper.selectById(uid);
+            if (me != null) {
+                FriendListItemDto self = new FriendListItemDto();
+                self.setPeerUserId(uid);
+                self.setNickname(me.getNickname());
+                self.setAvatarUrl(me.getAvatarUrl());
+                self.setGender(me.getGender());
+                self.setRemark("");
+                self.setOnline(true);
+                self.setInGame(false);
+                String nick = me.getNickname() != null ? me.getNickname() : "";
+                self.setDisplayName(nick);
+                spectatorFriends.add(0, self);
             }
         }
         Map<String, Object> body = new HashMap<>();
