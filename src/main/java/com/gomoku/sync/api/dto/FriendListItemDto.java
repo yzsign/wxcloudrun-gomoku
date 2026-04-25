@@ -1,7 +1,7 @@
 package com.gomoku.sync.api.dto;
 
 /**
- * GET /api/social/friends 单行；online 在 Service 层填充。
+ * GET /api/social/friends 单行；online、inGame 在 Service 层填充。
  */
 public class FriendListItemDto {
 
@@ -11,6 +11,8 @@ public class FriendListItemDto {
     private Integer gender;
     private String remark;
     private boolean online;
+    /** 是否在未结束对局中且棋手侧仍挂在 Gomoku 房间 WS（与 online 正交） */
+    private boolean inGame;
     private String displayName;
 
     public long getPeerUserId() {
@@ -59,6 +61,14 @@ public class FriendListItemDto {
 
     public void setOnline(boolean online) {
         this.online = online;
+    }
+
+    public boolean isInGame() {
+        return inGame;
+    }
+
+    public void setInGame(boolean inGame) {
+        this.inGame = inGame;
     }
 
     public String getDisplayName() {

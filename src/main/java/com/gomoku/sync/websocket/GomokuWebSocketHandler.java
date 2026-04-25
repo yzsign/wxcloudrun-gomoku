@@ -8,6 +8,7 @@ import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomChatMessage;
 import com.gomoku.sync.domain.Stone;
+import com.gomoku.sync.service.GomokuPlayerPresenceRegistry;
 import com.gomoku.sync.service.PieceSkinSelectionService;
 import com.gomoku.sync.service.RoomChatService;
 import com.gomoku.sync.service.RoomGameStateService;
@@ -43,6 +44,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private final RoomService roomService;
     private final RoomGameStateService roomGameStateService;
     private final RoomSessionTracker roomSessionTracker;
+    private final GomokuPlayerPresenceRegistry gomokuPlayerPresenceRegistry;
     private final ObjectMapper objectMapper;
     private final SessionJwtService sessionJwtService;
     private final PieceSkinSelectionService pieceSkinSelectionService;
@@ -61,6 +63,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             RoomService roomService,
             RoomGameStateService roomGameStateService,
             RoomSessionTracker roomSessionTracker,
+            GomokuPlayerPresenceRegistry gomokuPlayerPresenceRegistry,
             ObjectMapper objectMapper,
             SessionJwtService sessionJwtService,
             PieceSkinSelectionService pieceSkinSelectionService,
@@ -69,6 +72,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
         this.roomSessionTracker = roomSessionTracker;
+        this.gomokuPlayerPresenceRegistry = gomokuPlayerPresenceRegistry;
         this.objectMapper = objectMapper;
         this.sessionJwtService = sessionJwtService;
         this.pieceSkinSelectionService = pieceSkinSelectionService;
@@ -192,6 +196,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         applyOnlineClockTimeouts(room);
         broadcastState(room);
         maybePlayBot(room);
+        gomokuPlayerPresenceRegistry.registerPlaying(userId.get(), room.getRoomId());
     }
 
     @Override
@@ -1127,6 +1132,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
         roomGameStateService.tryPersist(room);
         roomSessionTracker.unregister(room.getRoomId());
+        Long uid = (Long) session.getAttributes().get(ATTR_USER_ID);
+        if (uid != null) {
+            gomokuPlayerPresenceRegistry.unregister(uid);
+        }
         broadcastState(room);
     }
 

@@ -33,6 +33,7 @@ public class SocialFriendService {
     private final SocialFriendRemarkMapper friendRemarkMapper;
     private final UserWebSocketRegistry userWebSocketRegistry;
     private final UserWebSocketPushService pushService;
+    private final GomokuPlayerPresenceRegistry gomokuPlayerPresenceRegistry;
 
     public SocialFriendService(
             UserMapper userMapper,
@@ -40,13 +41,15 @@ public class SocialFriendService {
             SocialFriendRequestMapper requestMapper,
             SocialFriendRemarkMapper friendRemarkMapper,
             UserWebSocketRegistry userWebSocketRegistry,
-            UserWebSocketPushService pushService) {
+            UserWebSocketPushService pushService,
+            GomokuPlayerPresenceRegistry gomokuPlayerPresenceRegistry) {
         this.userMapper = userMapper;
         this.friendshipMapper = friendshipMapper;
         this.requestMapper = requestMapper;
         this.friendRemarkMapper = friendRemarkMapper;
         this.userWebSocketRegistry = userWebSocketRegistry;
         this.pushService = pushService;
+        this.gomokuPlayerPresenceRegistry = gomokuPlayerPresenceRegistry;
     }
 
     @Transactional
@@ -244,6 +247,7 @@ public class SocialFriendService {
                     .map(WebSocketSession::isOpen)
                     .orElse(false);
             row.setOnline(online);
+            row.setInGame(gomokuPlayerPresenceRegistry.isPeerInActiveGame(row.getPeerUserId()));
             String nick = row.getNickname() != null ? row.getNickname() : "";
             String rem = row.getRemark() != null ? row.getRemark().trim() : "";
             row.setDisplayName(rem.isEmpty() ? nick : rem);
