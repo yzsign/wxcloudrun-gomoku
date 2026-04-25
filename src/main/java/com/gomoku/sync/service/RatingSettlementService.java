@@ -246,9 +246,30 @@ public class RatingSettlementService {
         int rawBlack;
         int rawWhite;
 
+        /** §4.1 和棋：双方 S=0.5，按公式正常变动；连胜/连败计数在 applyStatsAfterGame 中不变 */
         if (OUTCOME_DRAW.equals(outcome)) {
-            rawBlack = 0;
-            rawWhite = 0;
+            rawBlack =
+                    EloRatingCalculator.delta(
+                            blackEloBefore,
+                            whiteEloBefore,
+                            0.5,
+                            steps,
+                            black.getConsecutiveWins(),
+                            black.getConsecutiveLosses(),
+                            black.isLowTrust(),
+                            false,
+                            eloKScale);
+            rawWhite =
+                    EloRatingCalculator.delta(
+                            whiteEloBefore,
+                            blackEloBefore,
+                            0.5,
+                            steps,
+                            white.getConsecutiveWins(),
+                            white.getConsecutiveLosses(),
+                            white.isLowTrust(),
+                            false,
+                            eloKScale);
         } else if (OUTCOME_BLACK_WIN.equals(outcome)) {
             boolean forceM1 = runaway && Objects.equals(runawayUid, whiteId);
             rawBlack = EloRatingCalculator.delta(

@@ -37,6 +37,14 @@ class EloRatingCalculatorTest {
     }
 
     @Test
+    void drawChangesEloWhenExpectedNotHalf() {
+        int hi = EloRatingCalculator.delta(1700, 1300, 0.5, 30, 0, 0, false, false, 1.0);
+        int lo = EloRatingCalculator.delta(1300, 1700, 0.5, 30, 0, 0, false, false, 1.0);
+        assertTrue(hi < 0, "高分方和棋应略低于预期胜率，扣分: " + hi);
+        assertTrue(lo > 0, "低分方和棋应略高于预期胜率，加分: " + lo);
+    }
+
+    @Test
     void friendKScaleReducesCoreDelta() {
         int full = EloRatingCalculator.delta(1500, 1500, 1.0, 40, 0, 0, false, false, 1.0);
         int half = EloRatingCalculator.delta(1500, 1500, 1.0, 40, 0, 0, false, false, 0.5);
