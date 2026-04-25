@@ -8,7 +8,9 @@ import com.gomoku.sync.ai.GomokuAiEngine;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomChatMessage;
 import com.gomoku.sync.domain.Stone;
+import com.gomoku.sync.domain.User;
 import com.gomoku.sync.mapper.SocialFriendshipMapper;
+import com.gomoku.sync.mapper.UserMapper;
 import com.gomoku.sync.service.GomokuPlayerPresenceRegistry;
 import com.gomoku.sync.service.PieceSkinSelectionService;
 import com.gomoku.sync.service.RoomChatService;
@@ -52,6 +54,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     private final PieceSkinSelectionService pieceSkinSelectionService;
     private final RoomChatService roomChatService;
     private final SocialFriendshipMapper socialFriendshipMapper;
+    private final UserMapper userMapper;
     private final ScheduledExecutorService botScheduler;
     /** 人机落子延迟任务，同房间新调度会取消旧任务 */
     private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotMoves = new ConcurrentHashMap<>();
@@ -72,6 +75,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             PieceSkinSelectionService pieceSkinSelectionService,
             RoomChatService roomChatService,
             SocialFriendshipMapper socialFriendshipMapper,
+            UserMapper userMapper,
             ScheduledExecutorService gomokuBotScheduler) {
         this.roomService = roomService;
         this.roomGameStateService = roomGameStateService;
@@ -82,6 +86,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         this.pieceSkinSelectionService = pieceSkinSelectionService;
         this.roomChatService = roomChatService;
         this.socialFriendshipMapper = socialFriendshipMapper;
+        this.userMapper = userMapper;
         this.botScheduler = gomokuBotScheduler;
     }
 
@@ -1304,9 +1309,37 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             } else {
                 n.put("gameEndReason", ger);
             }
+            putSeatUserPublic(n, "black", room.getBlackUserId());
+            Long wUid = room.getWhiteUserId();
+            if (wUid == null) {
+                n.putNull("whiteUserId");
+                n.put("whiteNickname", "");
+                n.putNull("whiteAvatarUrl");
+            } else {
+                putSeatUserPublic(n, "white", wUid);
+            }
             return new TextMessage(Objects.requireNonNull(objectMapper.writeValueAsString(n)));
         } catch (Exception e) {
             return new TextMessage(Objects.requireNonNull("{\"type\":\"ERROR\",\"message\":\"序列化失败\"}"));
+        }
+    }
+
+    /** STATE 扩展：双方公开资料，供观战端绘制头像/昵称（不占座玩家无 opponent-rating）。 */
+    private void putSeatUserPublic(ObjectNode n, String side, long userId) {
+        n.put(side + "UserId", userId);
+        User u = userMapper.selectById(userId);
+        if (u == null) {
+            n.put(side + "Nickname", "玩家");
+            n.putNull(side + "AvatarUrl");
+            return;
+        }
+        String nick = u.getNickname();
+        n.put(side + "Nickname", nick != null && !nick.isEmpty() ? nick : "玩家");
+        String av = u.getAvatarUrl();
+        if (av != null && !av.isEmpty()) {
+            n.put(side + "AvatarUrl", av);
+        } else {
+            n.putNull(side + "AvatarUrl");
         }
     }
 
