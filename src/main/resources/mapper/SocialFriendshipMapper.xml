@@ -18,6 +18,7 @@
         WHERE user_low_id = #{userLowId} AND user_high_id = #{userHighId}
     </delete>
 
+    <!-- 不选 users.title_name：与 migration-v36 解耦，称号由 SocialFriendService 按 elo 补齐 -->
     <select id="listFriendsForUser" resultType="com.gomoku.sync.api.dto.FriendListItemDto">
         SELECT
             u.id AS peerUserId,
@@ -25,7 +26,6 @@
             u.avatar_url AS avatarUrl,
             u.gender AS gender,
             u.elo_score AS eloScore,
-            u.title_name AS titleName,
             COALESCE(r.remark, '') AS remark
         FROM social_friendship f
         INNER JOIN users u ON u.id = CASE

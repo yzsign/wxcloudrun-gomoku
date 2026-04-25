@@ -826,7 +826,8 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 白方或黑方为人机时：轮到该色且非悔棋/和棋待定时代为落子；随机延迟 1~5 秒再落子。
+     * 白方或黑方为人机时：轮到该色且非悔棋/和棋待定时代为落子。
+     * 随机匹配房：随机延迟 1~2 秒；其它联机人机房：随机延迟 1~5 秒。
      */
     public void maybePlayBot(GameRoom room) {
         roomGameStateService.syncRoomFromDbIfBehind(room);
@@ -859,7 +860,10 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
         String roomId = room.getRoomId();
         cancelPendingBotMove(roomId);
-        long delayMs = 1000L + ThreadLocalRandom.current().nextInt(4001);
+        long delayMs =
+                room.isRandomMatch()
+                        ? 1000L + ThreadLocalRandom.current().nextInt(1001)
+                        : 1000L + ThreadLocalRandom.current().nextInt(4001);
         ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
         holder[0] =
                 botScheduler.schedule(
