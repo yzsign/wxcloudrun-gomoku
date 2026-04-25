@@ -2,6 +2,7 @@ package com.gomoku.sync.api.dto;
 
 /**
  * GET /api/social/friends 单行；online、inGame 在 Service 层填充。
+ * <p>online 为真表示好友可感知为「在线」：已建立用户推送 /ws/user，或正挂在未终局对局的 Gomoku 房间链路上（与 inGame 为真时同时成立）。
  */
 public class FriendListItemDto {
 
@@ -10,8 +11,9 @@ public class FriendListItemDto {
     private String avatarUrl;
     private Integer gender;
     private String remark;
+    /** 用户级 WS 在线，或正参与未终局对局（见 class 说明） */
     private boolean online;
-    /** 是否在未结束对局中且棋手侧仍挂在 Gomoku 房间 WS（与 online 正交） */
+    /** 是否在未结束对局中且棋手侧仍挂在 Gomoku 房间 WS */
     private boolean inGame;
     private String displayName;
 
