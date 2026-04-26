@@ -23,7 +23,7 @@ public class FriendListItemDto {
     private String displayName;
     /** 天梯分 */
     private Integer eloScore;
-    /** 称号，与 {@code users.title_name} 一致，随对局结算与分数同步 */
+    /** 称号，与 {@code user_rating.title_name} 一致，随对局结算与分数同步 */
     private String titleName;
 
     public long getPeerUserId() {

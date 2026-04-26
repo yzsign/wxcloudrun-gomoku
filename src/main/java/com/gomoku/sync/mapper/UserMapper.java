@@ -16,6 +16,9 @@ public interface UserMapper {
 
     int insert(User user);
 
+    /** 新用户写入 users 后插入默认天梯行（INSERT IGNORE，与 users 1:1） */
+    int insertDefaultRatingProfile(@Param("userId") long userId);
+
     int updateByOpenid(User user);
 
     int updateRatingProfile(User user);

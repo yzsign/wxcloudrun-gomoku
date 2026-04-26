@@ -4,7 +4,7 @@ import com.gomoku.sync.domain.User;
 
 /**
  * 与 rule.md §5、小程序 {@code ratingTitle.js} 中 {@code getRankAndTitleByElo} 称号分段一致；变更分数后须同步
- * {@link User#setTitleName(String)} 并随 {@code users.title_name} 落库。
+ * {@link User#setTitleName(String)} 并随 {@code user_rating.title_name} 落库。
  */
 public final class RatingTitleUtil {
 

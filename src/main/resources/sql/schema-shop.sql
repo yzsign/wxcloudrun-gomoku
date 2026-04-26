@@ -3,7 +3,7 @@
 -- =============================================================================
 -- shop_items：上架商品元数据（是否积分兑换、展示名、排序、是否下架）。
 -- shop_item_prices：积分价；无行表示「不卖积分 / 仅条件解锁」（见 redeem_mode）。
--- 用户侧拥有关系：user_piece_skin_unlocks、user_consumables、users.activity_points。
+-- 用户侧拥有关系：user_piece_skin_unlocks、user_consumables、user_rating.activity_points。
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS `shop_items` (

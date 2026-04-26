@@ -37,27 +37,45 @@
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
-    <sql id="UserColumns">
-        id, openid, is_bot, bot_search_depth_min, bot_search_depth_max, bot_ai_style, unionid, nickname, avatar_url, gender, piece_skin_id,
-        elo_score, activity_points,
-        consecutive_wins, consecutive_losses,
-        today_net_change, elo_carry_over, last_rating_reset_date,
-        runaway_count, total_games, win_count, draw_count, season_end_score,
-        placement_fair_games, newbie_match_games, newbie_runaway_tally, low_trust,
-        last_login_at, created_at, updated_at
+    <!-- users u + user_rating r；缺行时用 COALESCE 与表默认值一致 -->
+    <sql id="UserSelectColumns">
+        u.id, u.openid, u.is_bot, u.bot_search_depth_min, u.bot_search_depth_max, u.bot_ai_style, u.unionid, u.nickname, u.avatar_url, u.gender, u.piece_skin_id,
+        COALESCE(r.elo_score, 1200) AS elo_score,
+        r.title_name,
+        COALESCE(r.activity_points, 0) AS activity_points,
+        COALESCE(r.consecutive_wins, 0) AS consecutive_wins,
+        COALESCE(r.consecutive_losses, 0) AS consecutive_losses,
+        COALESCE(r.today_net_change, 0) AS today_net_change,
+        COALESCE(r.elo_carry_over, 0) AS elo_carry_over,
+        r.last_rating_reset_date,
+        COALESCE(r.runaway_count, 0) AS runaway_count,
+        COALESCE(r.total_games, 0) AS total_games,
+        COALESCE(r.win_count, 0) AS win_count,
+        COALESCE(r.draw_count, 0) AS draw_count,
+        r.season_end_score,
+        COALESCE(r.placement_fair_games, 0) AS placement_fair_games,
+        COALESCE(r.newbie_match_games, 0) AS newbie_match_games,
+        COALESCE(r.newbie_runaway_tally, 0) AS newbie_runaway_tally,
+        COALESCE(r.low_trust, 0) AS low_trust,
+        u.last_login_at, u.created_at, u.updated_at
+    </sql>
+
+    <sql id="UserJoinFrom">
+        FROM users u
+        LEFT JOIN user_rating r ON r.user_id = u.id
     </sql>
 
     <select id="selectByOpenid" resultMap="UserResult">
-        SELECT <include refid="UserColumns"/>
-        FROM users
-        WHERE openid = #{openid}
+        SELECT <include refid="UserSelectColumns"/>
+        <include refid="UserJoinFrom"/>
+        WHERE u.openid = #{openid}
         LIMIT 1
     </select>
 
     <select id="selectById" resultMap="UserResult">
-        SELECT <include refid="UserColumns"/>
-        FROM users
-        WHERE id = #{id}
+        SELECT <include refid="UserSelectColumns"/>
+        <include refid="UserJoinFrom"/>
+        WHERE u.id = #{id}
         LIMIT 1
     </select>
 
@@ -69,9 +87,9 @@
     </select>
 
     <select id="selectByIdForUpdate" resultMap="UserResult">
-        SELECT <include refid="UserColumns"/>
-        FROM users
-        WHERE id = #{id}
+        SELECT <include refid="UserSelectColumns"/>
+        <include refid="UserJoinFrom"/>
+        WHERE u.id = #{id}
         LIMIT 1
         FOR UPDATE
     </select>
@@ -79,6 +97,10 @@
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
         INSERT INTO users (openid, unionid, nickname, avatar_url, gender, last_login_at)
         VALUES (#{openid}, #{unionid}, #{nickname}, #{avatarUrl}, #{gender,jdbcType=TINYINT}, #{lastLoginAt})
+    </insert>
+
+    <insert id="insertDefaultRatingProfile">
+        INSERT IGNORE INTO user_rating (user_id) VALUES (#{userId})
     </insert>
 
     <update id="updateByOpenid">
@@ -95,32 +117,46 @@
         SELECT id FROM users WHERE is_bot = 1 ORDER BY RAND() LIMIT 1
     </select>
 
-    <update id="updateRatingProfile">
-        UPDATE users
-        SET elo_score = #{eloScore},
-            title_name = #{titleName},
-            activity_points = #{activityPoints},
-            consecutive_wins = #{consecutiveWins},
-            consecutive_losses = #{consecutiveLosses},
-            today_net_change = #{todayNetChange},
-            elo_carry_over = #{eloCarryOver},
-            last_rating_reset_date = #{lastRatingResetDate,jdbcType=DATE},
-            runaway_count = #{runawayCount},
-            total_games = #{totalGames},
-            win_count = #{winCount},
-            draw_count = #{drawCount},
-            season_end_score = #{seasonEndScore,jdbcType=INTEGER},
-            placement_fair_games = #{placementFairGames},
-            newbie_match_games = #{newbieMatchGames},
-            newbie_runaway_tally = #{newbieRunawayTally},
-            low_trust = #{lowTrust}
-        WHERE id = #{id}
-    </update>
+    <!-- 全量写入天梯统计；缺行时插入，避免仅 UPDATE 导致 0 行 -->
+    <insert id="updateRatingProfile">
+        INSERT INTO user_rating (
+            user_id, elo_score, title_name, activity_points,
+            consecutive_wins, consecutive_losses,
+            today_net_change, elo_carry_over, last_rating_reset_date,
+            runaway_count, total_games, win_count, draw_count,
+            season_end_score, placement_fair_games, newbie_match_games, newbie_runaway_tally, low_trust
+        ) VALUES (
+            #{id}, #{eloScore}, #{titleName,jdbcType=VARCHAR}, #{activityPoints},
+            #{consecutiveWins}, #{consecutiveLosses},
+            #{todayNetChange}, #{eloCarryOver}, #{lastRatingResetDate,jdbcType=DATE},
+            #{runawayCount}, #{totalGames}, #{winCount}, #{drawCount},
+            #{seasonEndScore,jdbcType=INTEGER}, #{placementFairGames}, #{newbieMatchGames}, #{newbieRunawayTally},
+            #{lowTrust}
+        )
+        ON DUPLICATE KEY UPDATE
+            elo_score = VALUES(elo_score),
+            title_name = VALUES(title_name),
+            activity_points = VALUES(activity_points),
+            consecutive_wins = VALUES(consecutive_wins),
+            consecutive_losses = VALUES(consecutive_losses),
+            today_net_change = VALUES(today_net_change),
+            elo_carry_over = VALUES(elo_carry_over),
+            last_rating_reset_date = VALUES(last_rating_reset_date),
+            runaway_count = VALUES(runaway_count),
+            total_games = VALUES(total_games),
+            win_count = VALUES(win_count),
+            draw_count = VALUES(draw_count),
+            season_end_score = VALUES(season_end_score),
+            placement_fair_games = VALUES(placement_fair_games),
+            newbie_match_games = VALUES(newbie_match_games),
+            newbie_runaway_tally = VALUES(newbie_runaway_tally),
+            low_trust = VALUES(low_trust)
+    </insert>
 
     <update id="updateActivityPoints">
-        UPDATE users
+        UPDATE user_rating
         SET activity_points = #{activityPoints}
-        WHERE id = #{id}
+        WHERE user_id = #{id}
     </update>
 
     <update id="updatePieceSkinId">

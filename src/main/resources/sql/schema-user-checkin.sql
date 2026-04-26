@@ -1,4 +1,4 @@
--- 签到汇总：每用户一行（与 users 分离；活动积分仍在 users.activity_points）
+-- 签到汇总：每用户一行（与 users 分离；活动积分在 user_rating.activity_points）
 CREATE TABLE IF NOT EXISTS `user_checkin_state` (
   `user_id` BIGINT UNSIGNED NOT NULL,
   `last_checkin_ymd` VARCHAR(10) DEFAULT NULL COMMENT '上次签到 YYYY-MM-DD（Asia/Shanghai）',

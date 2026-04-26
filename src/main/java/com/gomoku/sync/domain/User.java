@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.Date;
 
 /**
- * 与表 users 对应（含 rule.md 天梯字段）
+ * 聚合 users（资料、人机）与 user_rating（天梯与统计）；查询时 JOIN，写入时分表更新
  */
 public class User {
 

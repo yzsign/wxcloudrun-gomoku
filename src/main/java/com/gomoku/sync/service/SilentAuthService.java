@@ -54,6 +54,7 @@ public class SilentAuthService {
             }
             u.setLastLoginAt(now);
             userMapper.insert(u);
+            userMapper.insertDefaultRatingProfile(u.getId());
             boolean admin = adminTokenService.isOpenidInAdminWhitelist(wx.getOpenid());
             return new SilentLoginResponse(u.getId(), sessionJwtService.createToken(u.getId()), admin);
         }

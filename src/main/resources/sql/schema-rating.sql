@@ -1,4 +1,4 @@
--- 与 rule.md v1.1 对齐：天梯分、对局归档、积分流水、房间参与者
+-- 与 rule.md v1.1 对齐：对局归档、积分流水、房间参与者；用户天梯分在 user_rating（见 schema-user.sql）
 -- 新库：可与 schema-user.sql 一并执行。已有库请用 migration-v2-rating.sql
 
 CREATE TABLE IF NOT EXISTS `room_participants` (

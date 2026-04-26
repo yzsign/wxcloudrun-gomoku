@@ -77,6 +77,7 @@ class SilentAuthServiceTest {
 
         ArgumentCaptor<User> cap = ArgumentCaptor.forClass(User.class);
         verify(userMapper).insert(cap.capture());
+        verify(userMapper).insertDefaultRatingProfile(100L);
         User inserted = cap.getValue();
         assertEquals("test-openid", inserted.getOpenid());
         assertEquals("test-union", inserted.getUnionid());
@@ -154,6 +155,7 @@ class SilentAuthServiceTest {
 
         ArgumentCaptor<User> cap = ArgumentCaptor.forClass(User.class);
         verify(userMapper).insert(cap.capture());
+        verify(userMapper).insertDefaultRatingProfile(1L);
         assertNull(cap.getValue().getGender());
     }
 }
