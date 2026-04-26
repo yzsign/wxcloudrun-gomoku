@@ -15,4 +15,11 @@ public interface ShopMapper {
             @Param("unitType") String unitType);
 
     List<ShopCatalogItemDto> selectEnabledCatalogWithCurrentPrices();
+
+    int countEnabledItems();
+
+    List<String> selectOrderItemCodes();
+
+    List<ShopCatalogItemDto> selectEnabledCatalogWithCurrentPricesPaged(
+            @Param("offset") int offset, @Param("limit") int limit);
 }

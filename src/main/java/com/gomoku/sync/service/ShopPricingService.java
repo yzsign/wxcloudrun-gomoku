@@ -1,6 +1,7 @@
 package com.gomoku.sync.service;
 
 import com.gomoku.sync.api.dto.ShopCatalogItemDto;
+import com.gomoku.sync.api.dto.ShopCatalogPageResponse;
 import com.gomoku.sync.api.dto.ShopCatalogResponse;
 import com.gomoku.sync.mapper.ShopMapper;
 import org.springframework.stereotype.Service;
@@ -79,5 +80,36 @@ public class ShopPricingService {
             rows = Collections.emptyList();
         }
         return new ShopCatalogResponse(rows);
+    }
+
+    /**
+     * 分页目录：与 {@link #buildCatalog()} 同一排序与价逻辑，仅 LIMIT / OFFSET。
+     */
+    public ShopCatalogPageResponse buildCatalogPage(int page, int size) {
+        int p = Math.max(0, page);
+        int sz = size;
+        if (sz < 1) {
+            sz = 6;
+        }
+        if (sz > 50) {
+            sz = 50;
+        }
+        int total = shopMapper.countEnabledItems();
+        List<String> orderCodes = shopMapper.selectOrderItemCodes();
+        if (orderCodes == null) {
+            orderCodes = Collections.emptyList();
+        }
+        int totalPages = total == 0 ? 0 : (total + sz - 1) / sz;
+        int offset = p * sz;
+        List<ShopCatalogItemDto> rows;
+        if (offset >= total) {
+            rows = Collections.emptyList();
+        } else {
+            rows = shopMapper.selectEnabledCatalogWithCurrentPricesPaged(offset, sz);
+            if (rows == null) {
+                rows = Collections.emptyList();
+            }
+        }
+        return new ShopCatalogPageResponse(rows, total, p, sz, totalPages, orderCodes);
     }
 }
