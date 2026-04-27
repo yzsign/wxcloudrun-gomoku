@@ -92,4 +92,28 @@ public class UserWebSocketPushService {
         root.set("payload", payload);
         sendToUser(toUserId, root);
     }
+
+    /** 好友对局邀请（房主 → 被邀请人，经用户 WS） */
+    public void roomInviteIncoming(
+            long toUserId, long fromUserId, String fromNickname, String roomId) {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("fromUserId", fromUserId);
+        payload.put("fromNickname", fromNickname != null ? fromNickname : "");
+        payload.put("roomId", roomId != null ? roomId : "");
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("type", "ROOM_INVITE_INCOMING");
+        root.set("payload", payload);
+        sendToUser(toUserId, root);
+    }
+
+    /** 被邀请人拒绝邀请，通知房主 */
+    public void roomInviteDeclined(long inviterUserId, long declinedByUserId, String roomId) {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("fromUserId", declinedByUserId);
+        payload.put("roomId", roomId != null ? roomId : "");
+        ObjectNode root = objectMapper.createObjectNode();
+        root.put("type", "ROOM_INVITE_DECLINED");
+        root.set("payload", payload);
+        sendToUser(inviterUserId, root);
+    }
 }

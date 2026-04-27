@@ -6,8 +6,11 @@ import com.gomoku.sync.api.dto.CreateFriendResponse;
 import com.gomoku.sync.api.dto.FriendRequestActionResponse;
 import com.gomoku.sync.api.dto.FriendStatusResponse;
 import com.gomoku.sync.api.dto.FriendsListResponse;
+import com.gomoku.sync.api.dto.PvpInviteDeclineBody;
+import com.gomoku.sync.api.dto.PvpInvitePushBody;
 import com.gomoku.sync.api.dto.SendFriendMessageBody;
 import com.gomoku.sync.api.dto.UpdateFriendRemarkBody;
+import com.gomoku.sync.service.PvpInviteService;
 import com.gomoku.sync.service.SessionJwtService;
 import com.gomoku.sync.service.SocialFriendService;
 import org.springframework.http.HttpStatus;
@@ -34,10 +37,15 @@ public class SocialFriendController {
 
     private final SessionJwtService sessionJwtService;
     private final SocialFriendService socialFriendService;
+    private final PvpInviteService pvpInviteService;
 
-    public SocialFriendController(SessionJwtService sessionJwtService, SocialFriendService socialFriendService) {
+    public SocialFriendController(
+            SessionJwtService sessionJwtService,
+            SocialFriendService socialFriendService,
+            PvpInviteService pvpInviteService) {
         this.sessionJwtService = sessionJwtService;
         this.socialFriendService = socialFriendService;
+        this.pvpInviteService = pvpInviteService;
     }
 
     @PostMapping("/friend-requests")
@@ -189,6 +197,62 @@ public class SocialFriendController {
         }
         try {
             socialFriendService.sendFriendDirectMessage(uid.get(), body.getPeerUserId(), body.getText());
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
+        }
+    }
+
+    /**
+     * 房主创建房间后，向指定好友的用户 WS 推送对局邀请（非微信分享）。
+     */
+    @PostMapping("/pvp-invites/push")
+    public ResponseEntity<?> pushPvpInvite(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) PvpInvitePushBody body) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        if (body == null
+                || body.getPeerUserId() == null
+                || body.getPeerUserId() <= 0
+                || body.getRoomId() == null
+                || body.getRoomId().trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(new ApiError("BAD_REQUEST", "缺少 peerUserId 或 roomId"));
+        }
+        try {
+            pvpInviteService.pushInviteToPeer(uid.get(), body.getPeerUserId(), body.getRoomId());
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
+        }
+    }
+
+    /**
+     * 被邀请人拒绝邀请时通知房主（用户 WS）。
+     */
+    @PostMapping("/pvp-invites/decline")
+    public ResponseEntity<?> declinePvpInvite(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestBody(required = false) PvpInviteDeclineBody body) {
+        Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
+        if (!uid.isPresent()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiError("UNAUTHORIZED", "请先登录"));
+        }
+        if (body == null
+                || body.getInviterUserId() == null
+                || body.getInviterUserId() <= 0
+                || body.getRoomId() == null
+                || body.getRoomId().trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(new ApiError("BAD_REQUEST", "缺少 inviterUserId 或 roomId"));
+        }
+        try {
+            pvpInviteService.notifyDecline(uid.get(), body.getInviterUserId(), body.getRoomId());
             return ResponseEntity.ok().build();
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(new ApiError("BAD_REQUEST", e.getMessage()));
