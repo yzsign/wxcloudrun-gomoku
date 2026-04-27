@@ -37,11 +37,21 @@ class EloRatingCalculatorTest {
     }
 
     @Test
-    void drawChangesEloWhenExpectedNotHalf() {
+    void drawResultHalfNeutralWhenElosEqual() {
+        assertEquals(
+                0,
+                EloRatingCalculator.delta(1500, 1500, 0.5, 30, 0, 0, false, false, 1.0));
+    }
+
+    /**
+     * S=0.5 时若双方分差大，公式上仍不对称；天梯结算中和棋已固定 rawDelta=0，不再调用此路径。
+     */
+    @Test
+    void drawResultHalfAsymmetricWhenElosDiffer() {
         int hi = EloRatingCalculator.delta(1700, 1300, 0.5, 30, 0, 0, false, false, 1.0);
         int lo = EloRatingCalculator.delta(1300, 1700, 0.5, 30, 0, 0, false, false, 1.0);
-        assertTrue(hi < 0, "高分方和棋应略低于预期胜率，扣分: " + hi);
-        assertTrue(lo > 0, "低分方和棋应略高于预期胜率，加分: " + lo);
+        assertTrue(hi < 0, "expectedScore>0.5 时 0.5 结果为负: " + hi);
+        assertTrue(lo > 0, "expectedScore<0.5 时 0.5 结果为正: " + lo);
     }
 
     @Test

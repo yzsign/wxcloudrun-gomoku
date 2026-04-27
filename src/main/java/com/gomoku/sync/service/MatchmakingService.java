@@ -5,18 +5,24 @@ import com.gomoku.sync.api.dto.RandomMatchResponse;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.mapper.UserMapper;
+import com.gomoku.sync.service.rating.RatingTitleUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.List;
 
 /**
- * 随机匹配：FIFO 队列中存放「仅黑方、尚无白方」的房间；新玩家优先与队首房间配对。
+ * 随机匹配：队列中存放「仅黑方、尚无白方」的房间。寻位者优先与天梯分更接近的一方配对，其次偏好段位更接近；
+ * 两位玩家段位（称号档位 0～11）相差超过 3 档则不会匹配到同一间等待房。分数与段位同样接近时，先入队的房主优先被配对。
  */
 @Service
 public class MatchmakingService {
+
+    /** 段位序（0～11）之差的绝对值超过此值则不可匹配 */
+    private static final int MAX_RANDOM_MATCH_RANK_SPAN = 3;
 
     private final RoomService roomService;
     private final UserMapper userMapper;
@@ -49,16 +55,17 @@ public class MatchmakingService {
                             "host", r.getRoomId(), r.getBlackToken(), null, r.getSize(), null);
                 }
             }
-            int sameUserSkips = 0;
+            User guestUser = userMapper.selectById(userId);
+            int guestElo = guestUser != null ? guestUser.getEloScore() : 1200;
+            int guestRank = RatingTitleUtil.rankIndexForElo(guestElo);
             while (true) {
-                String roomId = waitingRoomIds.peekFirst();
+                String roomId = selectBestWaitingRoomForGuest(userId, guestElo, guestRank);
                 if (roomId == null) {
                     break;
                 }
                 RoomService.JoinResult jr = roomService.joinRoom(roomId, userId);
                 if (jr.isOk()) {
-                    sameUserSkips = 0;
-                    waitingRoomIds.pollFirst();
+                    waitingRoomIds.remove(roomId);
                     if (randomSwapSides) {
                         roomService.maybeSwapRandomSides(roomId);
                     }
@@ -76,29 +83,64 @@ public class MatchmakingService {
                             room.getSize(),
                             yourColor);
                 }
-                if ("SAME_USER".equals(jr.getError())) {
-                    /*
-                     * 队首为本人创建的等待房，不能作为 guest 入座；移至队尾供其他寻敌者匹配，
-                     * 不可 poll 丢弃，否则该房永久脱离匹配队列。
-                     */
-                    if (sameUserSkips >= waitingRoomIds.size()) {
-                        break;
-                    }
-                    sameUserSkips++;
-                    waitingRoomIds.addLast(waitingRoomIds.pollFirst());
-                    continue;
-                }
-                sameUserSkips = 0;
-                waitingRoomIds.pollFirst();
+                waitingRoomIds.remove(roomId);
                 if ("ROOM_NOT_FOUND".equals(jr.getError())) {
                     roomService.removeRoomIfExists(roomId);
                 }
-                // ROOM_FULL：移出队列，不删房间
             }
             GameRoom room = roomService.createRoom(userId, true);
             waitingRoomIds.addLast(room.getRoomId());
             return new RandomMatchResponse("host", room.getRoomId(), room.getBlackToken(), null, room.getSize(), null);
         }
+    }
+
+    /**
+     * 在待匹配房间中选一间：段位差在 {@link #MAX_RANDOM_MATCH_RANK_SPAN} 内，且
+     * 先按天梯分差最小，再按段位差最小；仍相等则偏好先入队的房间。
+     */
+    private String selectBestWaitingRoomForGuest(
+            long guestUserId, int guestElo, int guestRank) {
+        List<String> order = new ArrayList<>(waitingRoomIds);
+        String bestRoomId = null;
+        long bestEloDiff = Long.MAX_VALUE;
+        int bestRankDiff = Integer.MAX_VALUE;
+        int bestQueueIndex = Integer.MAX_VALUE;
+
+        for (int i = 0; i < order.size(); i++) {
+            String roomId = order.get(i);
+            GameRoom r = roomService.getRoom(roomId);
+            if (r == null) {
+                waitingRoomIds.remove(roomId);
+                continue;
+            }
+            if (r.isPuzzleRoom() || r.hasGuest()) {
+                waitingRoomIds.remove(roomId);
+                continue;
+            }
+            if (r.getBlackUserId() == guestUserId) {
+                continue;
+            }
+            User host = userMapper.selectById(r.getBlackUserId());
+            int hostElo = host != null ? host.getEloScore() : 1200;
+            int hostRank = RatingTitleUtil.rankIndexForElo(hostElo);
+            int rankDiff = Math.abs(guestRank - hostRank);
+            if (rankDiff > MAX_RANDOM_MATCH_RANK_SPAN) {
+                continue;
+            }
+            long eloDiff = Math.abs((long) guestElo - hostElo);
+            if (bestRoomId == null
+                    || eloDiff < bestEloDiff
+                    || (eloDiff == bestEloDiff && rankDiff < bestRankDiff)
+                    || (eloDiff == bestEloDiff
+                            && rankDiff == bestRankDiff
+                            && i < bestQueueIndex)) {
+                bestRoomId = roomId;
+                bestEloDiff = eloDiff;
+                bestRankDiff = rankDiff;
+                bestQueueIndex = i;
+            }
+        }
+        return bestRoomId;
     }
 
     public enum CancelOutcome {
