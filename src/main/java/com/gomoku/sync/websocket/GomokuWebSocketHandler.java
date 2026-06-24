@@ -255,6 +255,12 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(@NonNull WebSocketSession session, @NonNull TextMessage message)
             throws Exception {
+        String raw = message.getPayload();
+        String trimmed = raw == null ? "" : raw.trim();
+        if ("ping".equalsIgnoreCase(trimmed) || "{\"type\":\"PING\"}".equalsIgnoreCase(trimmed)) {
+            session.sendMessage(new TextMessage("{\"type\":\"PONG\"}"));
+            return;
+        }
         if (Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
             return;
         }
@@ -264,7 +270,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-        JsonNode root = objectMapper.readTree(message.getPayload());
+        JsonNode root = objectMapper.readTree(raw);
         String type = root.path("type").asText("");
         if ("MOVE".equals(type)) {
             handleMove(session, room, color, root);

@@ -4,12 +4,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.GameRoomStateSnapshot;
 import com.gomoku.sync.domain.RoomGameStateRow;
+import com.gomoku.sync.domain.RoomStateVersionPeek;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.mapper.RoomGameStateMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -212,7 +215,17 @@ public class RoomGameStateService {
      * 轮询：若 DB 版本新于本实例已知版本，则应用并返回 true（由调用方 broadcast）。
      */
     public boolean pollApplyIfNewer(String roomId, GameRoom room) {
-        Long dbVerObj = roomGameStateMapper.selectStateVersionByRoomId(roomId);
+        return pollApplyIfNewer(roomId, room, null);
+    }
+
+    /**
+     * @param prefetchedDbVersion 批量查询得到的当前 DB 版本；null 则单独 SELECT version（兼容旧逻辑）。
+     */
+    public boolean pollApplyIfNewer(String roomId, GameRoom room, Long prefetchedDbVersion) {
+        Long dbVerObj = prefetchedDbVersion;
+        if (dbVerObj == null) {
+            dbVerObj = roomGameStateMapper.selectStateVersionByRoomId(roomId);
+        }
         if (dbVerObj == null) {
             return false;
         }
@@ -238,6 +251,34 @@ public class RoomGameStateService {
         } finally {
             room.getLock().unlock();
         }
+    }
+
+    /**
+     * 单机多房间轮询：分批 IN 查询版本号，避免每房一句 SELECT（{@link com.gomoku.sync.websocket.RoomGameStatePollTask}）。
+     *
+     * @param maxChunk 单批 IN 列表长度上限（不宜过大以免 SQL 过长）
+     */
+    public Map<String, Long> loadStateVersionsForPoll(List<String> roomIds, int maxChunk) {
+        Map<String, Long> out = new HashMap<>(Math.min(Math.max(16, roomIds.size()), 8192));
+        if (roomIds.isEmpty()) {
+            return out;
+        }
+        int chunk = Math.max(50, maxChunk);
+        for (int i = 0; i < roomIds.size(); i += chunk) {
+            int to = Math.min(i + chunk, roomIds.size());
+            List<String> sub = roomIds.subList(i, to);
+            List<RoomStateVersionPeek> rows =
+                    roomGameStateMapper.selectStateVersionsByRoomIds(sub);
+            if (rows == null) {
+                continue;
+            }
+            for (RoomStateVersionPeek r : rows) {
+                if (r.getRoomId() != null && r.getStateVersion() != null) {
+                    out.put(r.getRoomId(), r.getStateVersion());
+                }
+            }
+        }
+        return out;
     }
 
     private void applySnapshotJson(GameRoom room, String json) {

@@ -72,10 +72,11 @@
                             g.black_user_id AS blackUserId,
                             g.white_user_id AS whiteUserId,
                             ou.nickname AS opponentNickname,
-                            ou.is_bot AS opponentBot,
+                            (CASE WHEN ou.is_bot &lt;&gt; 0 AND IFNULL(rp.random_match, 0) &lt;&gt; 0 THEN 0 ELSE ou.is_bot END) AS opponentBot,
                             ou.avatar_url AS opponentAvatarUrl,
                             ou.gender AS opponentGender
                         FROM games g
+                        LEFT JOIN room_participants rp ON rp.room_id = g.room_id
                         INNER JOIN users ou ON ou.id = g.white_user_id
                         WHERE g.black_user_id = #{userId}
                         <if test="resultFilter != null and resultFilter == 'WIN'">
@@ -99,10 +100,11 @@
                             g.black_user_id AS blackUserId,
                             g.white_user_id AS whiteUserId,
                             ou.nickname AS opponentNickname,
-                            ou.is_bot AS opponentBot,
+                            (CASE WHEN ou.is_bot &lt;&gt; 0 AND IFNULL(rp.random_match, 0) &lt;&gt; 0 THEN 0 ELSE ou.is_bot END) AS opponentBot,
                             ou.avatar_url AS opponentAvatarUrl,
                             ou.gender AS opponentGender
                         FROM games g
+                        LEFT JOIN room_participants rp ON rp.room_id = g.room_id
                         INNER JOIN users ou ON ou.id = g.black_user_id
                         WHERE g.white_user_id = #{userId}
                         <if test="resultFilter != null and resultFilter == 'WIN'">
@@ -130,10 +132,11 @@
                         g.black_user_id AS blackUserId,
                         g.white_user_id AS whiteUserId,
                         ou.nickname AS opponentNickname,
-                        ou.is_bot AS opponentBot,
+                        (CASE WHEN ou.is_bot &lt;&gt; 0 AND IFNULL(rp.random_match, 0) &lt;&gt; 0 THEN 0 ELSE ou.is_bot END) AS opponentBot,
                         ou.avatar_url AS opponentAvatarUrl,
                         ou.gender AS opponentGender
                     FROM games g
+                    LEFT JOIN room_participants rp ON rp.room_id = g.room_id
                     INNER JOIN users ou ON ou.id = g.white_user_id
                     WHERE g.black_user_id = #{userId}
                     <if test="resultFilter != null and resultFilter == 'WIN'">
@@ -153,10 +156,11 @@
                         g.black_user_id AS blackUserId,
                         g.white_user_id AS whiteUserId,
                         ou.nickname AS opponentNickname,
-                        ou.is_bot AS opponentBot,
+                        (CASE WHEN ou.is_bot &lt;&gt; 0 AND IFNULL(rp.random_match, 0) &lt;&gt; 0 THEN 0 ELSE ou.is_bot END) AS opponentBot,
                         ou.avatar_url AS opponentAvatarUrl,
                         ou.gender AS opponentGender
                     FROM games g
+                    LEFT JOIN room_participants rp ON rp.room_id = g.room_id
                     INNER JOIN users ou ON ou.id = g.black_user_id
                     WHERE g.white_user_id = #{userId}
                     <if test="resultFilter != null and resultFilter == 'WIN'">

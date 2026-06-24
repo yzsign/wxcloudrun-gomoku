@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CosmeticEquipService {
 
     private static final String THEME_CLASSIC = "classic";
+    private static final String THEME_CYBERPUNK = "cyberpunk";
     private static final String BOARD_SKILL_ITEM_DAGGER = "dagger";
     private static final String BOARD_SKILL_ITEM_LOVE = "love";
     private static final String BOARD_SKILL_CLEAR = "off";
@@ -122,12 +123,13 @@ public class CosmeticEquipService {
 
     private static boolean isSelectableThemeId(String themeId) {
         return THEME_CLASSIC.equals(themeId)
+                || THEME_CYBERPUNK.equals(themeId)
                 || PieceSkinRedeemService.THEME_MINT.equals(themeId)
                 || PieceSkinRedeemService.THEME_INK.equals(themeId);
     }
 
     private boolean canWearTheme(long userId, String themeId) {
-        if (THEME_CLASSIC.equals(themeId)) {
+        if (THEME_CLASSIC.equals(themeId) || THEME_CYBERPUNK.equals(themeId)) {
             return true;
         }
         if (PieceSkinRedeemService.THEME_MINT.equals(themeId)

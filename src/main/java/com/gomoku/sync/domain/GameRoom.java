@@ -213,6 +213,10 @@ public class GameRoom {
                 return true;
             }
             if (clockMoveDeadlineWallMs > 0L && now >= clockMoveDeadlineWallMs) {
+                /** 尚无落子记录时不因步时截止判负：避免等人、读秒暂停遗漏等场景下空盘误判终局 */
+                if (moveHistory.isEmpty()) {
+                    return false;
+                }
                 gameOver = true;
                 winner = oppositeColor(current);
                 gameEndReason = END_REASON_MOVE_TIMEOUT;
@@ -260,7 +264,8 @@ public class GameRoom {
     }
 
     /**
-     * 非随机、非残局：在双方未同时「在位」时暂停读秒；曾同时在线后不因单方断线再进入该暂停（与客户端 onlineFriendBothEverConnected 一致）。
+     * 非残局：在双方未同时「在位」时暂停读秒；曾同时在线后不因单方断线再进入该暂停（与客户端 onlineFriendBothEverConnected 一致）。
+     * 随机匹配亦适用：否则建房即启动的步时会在「等对手入座」约 30s 内触发空盘超时终局（前端表现为刚匹配即结算）。
      *
      * @return 若与持久化快照相关的时钟或好友位标志有变化则为 true
      */
@@ -271,7 +276,7 @@ public class GameRoom {
             long snapGame = clockGameDeadlineWallMs;
             long snapPause = clockPauseStartedWallMs;
             boolean snapFriend = friendBothHumanSeatsLiveOnce;
-            if (gameOver || puzzleRoom || randomMatch) {
+            if (gameOver || puzzleRoom) {
                 return false;
             }
             if (pendingUndoRequesterColor != null || pendingDrawRequesterColor != null) {

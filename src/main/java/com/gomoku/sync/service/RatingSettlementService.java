@@ -229,8 +229,15 @@ public class RatingSettlementService {
         User black = blackId == idLo ? uLo : uHi;
         User white = blackId == idLo ? uHi : uLo;
 
+        /**
+         * 人机可能在黑或白（随机匹配 50% 换座后人类执白）：须由人类座位提交。
+         * 旧逻辑仅允许「白方人机时黑方提交」，人类执白时会误拒。
+         */
         if (white.isBot() && callerUserId != blackId) {
-            throw new IllegalArgumentException("人机对局仅执黑方人类玩家可提交结算");
+            throw new IllegalArgumentException("人机对局须由人类玩家提交结算");
+        }
+        if (black.isBot() && callerUserId != whiteId) {
+            throw new IllegalArgumentException("人机对局须由人类玩家提交结算");
         }
 
         DailyEloCap.rolloverIfNeeded(black, today);
@@ -409,7 +416,7 @@ public class RatingSettlementService {
 
     /**
      * 本局团团积分增量（与 {@link #applyStatsAfterGame} 一致）：
-     * 有效局 ≥15 手且非逃跑时——随机匹配：胜 +10、负 +5，和棋双方 +10；好友房等非随机：双方 +10、胜方额外 +5。
+     * 有效局 ≥15 手且非逃跑时——随机匹配：胜 +10、负 +5；好友房等非随机：双方 +10、胜方额外 +5。和棋双方 +0。
      */
     static int activityPointsDeltaForSide(
             boolean forBlack,
@@ -420,10 +427,10 @@ public class RatingSettlementService {
         if (steps < 15 || runaway) {
             return 0;
         }
+        if (OUTCOME_DRAW.equals(outcome)) {
+            return 0;
+        }
         if (randomMatchRoom) {
-            if (OUTCOME_DRAW.equals(outcome)) {
-                return 10;
-            }
             if (OUTCOME_BLACK_WIN.equals(outcome)) {
                 return forBlack ? 10 : 5;
             }

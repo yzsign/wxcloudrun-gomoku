@@ -48,7 +48,9 @@ public class SilentAuthService {
             u.setOpenid(wx.getOpenid());
             u.setUnionid(wx.getUnionid());
             u.setNickname(req.getNickname());
-            u.setAvatarUrl(req.getAvatarUrl());
+            if (StringUtils.hasText(req.getAvatarUrl())) {
+                u.setAvatarUrl(req.getAvatarUrl());
+            }
             if (gender != null) {
                 u.setGender(gender);
             }
@@ -65,7 +67,7 @@ public class SilentAuthService {
         if (req.getNickname() != null) {
             existing.setNickname(req.getNickname());
         }
-        if (req.getAvatarUrl() != null) {
+        if (StringUtils.hasText(req.getAvatarUrl())) {
             existing.setAvatarUrl(req.getAvatarUrl());
         }
         if (gender != null) {

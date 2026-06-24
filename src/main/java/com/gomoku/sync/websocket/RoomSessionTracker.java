@@ -29,6 +29,10 @@ public class RoomSessionTracker {
     }
 
     public List<String> snapshotRoomIds() {
+        int n = refs.size();
+        if (n == 0) {
+            return java.util.Collections.emptyList();
+        }
         return new ArrayList<>(refs.keySet());
     }
 }

@@ -37,6 +37,16 @@
         LIMIT 1
     </select>
 
+    <select id="selectStateVersionsByRoomIds"
+            resultType="com.gomoku.sync.domain.RoomStateVersionPeek">
+        SELECT room_id AS roomId, state_version AS stateVersion
+        FROM room_game_state
+        WHERE room_id IN
+        <foreach collection="roomIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
     <delete id="deleteByRoomId">
         DELETE FROM room_game_state WHERE room_id = #{roomId}
     </delete>
