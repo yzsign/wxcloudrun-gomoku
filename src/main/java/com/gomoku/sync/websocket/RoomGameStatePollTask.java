@@ -56,6 +56,7 @@ public class RoomGameStatePollTask {
                 roomGameStateService.tryPersist(room);
             }
             if (room.applyClockTimeoutsIfDue()) {
+                gomokuWebSocketHandler.cancelPendingBotTasksForRoom(roomId);
                 roomGameStateService.tryPersist(room);
                 gomokuWebSocketHandler.broadcastState(room);
             } else if (dbNewer) {

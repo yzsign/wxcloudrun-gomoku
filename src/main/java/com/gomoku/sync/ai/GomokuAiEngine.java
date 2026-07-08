@@ -104,6 +104,18 @@ public final class GomokuAiEngine {
         return d != null && System.nanoTime() > d;
     }
 
+    /** 思考预算耗尽时：取候选集启发式排序后的首着，避免 minimax 未启动即无棋可下。 */
+    private static int[] fallbackMoveFromCandidates(
+            int[][] board, int size, int aiColor, BotAiStyle st) {
+        List<int[]> cands = getCandidates(board, size);
+        if (cands.isEmpty()) {
+            return new int[] {size / 2, size / 2};
+        }
+        sortCandidates(board, size, cands, aiColor, st);
+        int[] m = cands.get(0);
+        return new int[] {m[0], m[1]};
+    }
+
     private static int[] chooseMoveInner(int[][] board, int size, int aiColor, int searchDepth) {
         BotAiStyle st = style();
         int opp = opposite(aiColor);
@@ -116,14 +128,23 @@ public final class GomokuAiEngine {
         if (win != null) {
             return win;
         }
+        if (timeUp()) {
+            return fallbackMoveFromCandidates(board, size, aiColor, st);
+        }
         int[] block = findWinningMove(board, size, opp);
         if (block != null) {
             return block;
+        }
+        if (timeUp()) {
+            return fallbackMoveFromCandidates(board, size, aiColor, st);
         }
 
         int[] forced = findForcedPriorityMove(board, size, aiColor);
         if (forced != null) {
             return forced;
+        }
+        if (timeUp()) {
+            return fallbackMoveFromCandidates(board, size, aiColor, st);
         }
 
         List<int[]> cands = getCandidates(board, size);
@@ -995,6 +1016,9 @@ public final class GomokuAiEngine {
             for (int c = 0; c < size; c++) {
                 if (board[r][c] != Stone.EMPTY) {
                     continue;
+                }
+                if (timeUp()) {
+                    return null;
                 }
                 MoveAnalysis a = analyzeMovePattern(board, size, r, c, aiColor);
                 if (a == null || a.hasWin) {

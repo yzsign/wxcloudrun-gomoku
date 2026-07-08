@@ -105,7 +105,7 @@ public class MatchController {
     }
 
     /**
-     * 房主等待真人超时（如 5s）后调用：从数据库随机一名人机作为白方入座，对局仍走 WebSocket，白棋由服务端计算。
+     * 房主等待真人超时（客户端约 2s）后调用：从数据库随机一名人机作为白方入座，对局仍走 WebSocket，白棋由服务端计算。
      */
     @PostMapping("/random/fallback-bot")
     public ResponseEntity<?> fallbackBot(

@@ -64,6 +64,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     /** 人机对和棋请求的延迟应答 */
     private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotDrawResponses =
             new ConcurrentHashMap<>();
+    /** 随机匹配：人机对「再来一局」邀请的延迟应答 */
+    private final ConcurrentHashMap<String, ScheduledFuture<?>> pendingBotRematchResponses =
+            new ConcurrentHashMap<>();
 
     public GomokuWebSocketHandler(
             RoomService roomService,
@@ -258,6 +261,15 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         String raw = message.getPayload();
         String trimmed = raw == null ? "" : raw.trim();
         if ("ping".equalsIgnoreCase(trimmed) || "{\"type\":\"PING\"}".equalsIgnoreCase(trimmed)) {
+            if (!Boolean.TRUE.equals(session.getAttributes().get(ATTR_SPECTATOR))) {
+                GameRoom pingRoom = (GameRoom) session.getAttributes().get(ATTR_ROOM);
+                if (pingRoom != null) {
+                    roomGameStateService.syncRoomFromDbIfBehind(pingRoom);
+                    if (applyOnlineClockTimeouts(pingRoom)) {
+                        broadcastState(pingRoom);
+                    }
+                }
+            }
             session.sendMessage(new TextMessage("{\"type\":\"PONG\"}"));
             return;
         }
@@ -374,6 +386,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         if (!room.applyClockTimeoutsIfDue()) {
             return false;
         }
+        cancelPendingBotTasks(room.getRoomId());
         if (!roomGameStateService.tryPersist(room)) {
             roomGameStateService.forceReloadFromDb(room);
         }
@@ -747,6 +760,9 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         broadcastState(room);
+        if (scheduleBotRematchResponseIfNeeded(room)) {
+            return;
+        }
         maybePlayBot(room);
     }
 
@@ -775,6 +791,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleRematchDecline(WebSocketSession session, GameRoom room, int color) throws Exception {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotRematchResponse(room.getRoomId());
         Integer requester = room.getPendingRematchRequesterColor();
         room.getLock().lock();
         try {
@@ -802,6 +819,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
 
     private void handleRematchCancel(WebSocketSession session, GameRoom room, int color) throws Exception {
         roomGameStateService.syncRoomFromDbIfBehind(room);
+        cancelPendingBotRematchResponse(room.getRoomId());
         room.getLock().lock();
         try {
             String err = room.cancelRematchRequest(color);
@@ -927,6 +945,11 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                         BotAiStyle.fromOrdinal(room.getBotAiStyleOrdinal()));
         String err = room.tryMove(botColor, mv[0], mv[1]);
         if (err != null) {
+            if (applyOnlineClockTimeouts(room) || room.isGameOver()) {
+                broadcastState(room);
+            } else {
+                maybePlayBot(room);
+            }
             return;
         }
         if (!roomGameStateService.tryPersist(room)) {
@@ -938,7 +961,99 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 人机对黑方悔棋：延迟 1~3 秒后，70% 同意、30% 拒绝。
+     * 随机匹配人机：约 70% 拒绝对方申请；其它人机房仍约 70% 同意。
+     */
+    private boolean botShouldRejectPendingRequest(GameRoom room) {
+        double rejectThreshold = room.isRandomMatch() ? 0.7 : 0.3;
+        return ThreadLocalRandom.current().nextDouble() < rejectThreshold;
+    }
+
+    /**
+     * 随机匹配终局后：人机受邀「再来一局」时延迟应答（真人仍由客户端弹窗操作）。
+     *
+     * @return 是否已调度人机应答
+     */
+    private boolean scheduleBotRematchResponseIfNeeded(GameRoom room) {
+        if (!room.isRandomMatch()) {
+            return false;
+        }
+        Integer requester = room.getPendingRematchRequesterColor();
+        if (requester == null) {
+            return false;
+        }
+        int botColor = requester == Stone.BLACK ? Stone.WHITE : Stone.BLACK;
+        boolean botResponder =
+                (botColor == Stone.WHITE && room.isWhiteIsBot())
+                        || (botColor == Stone.BLACK && room.isBlackIsBot());
+        if (!botResponder) {
+            return false;
+        }
+        scheduleBotRematchResponse(room);
+        return true;
+    }
+
+    private void scheduleBotRematchResponse(GameRoom room) {
+        String roomId = room.getRoomId();
+        cancelPendingBotRematchResponse(roomId);
+        long delayMs = 1000L + ThreadLocalRandom.current().nextInt(2001);
+        ScheduledFuture<?>[] holder = new ScheduledFuture<?>[1];
+        holder[0] =
+                botScheduler.schedule(
+                        () -> {
+                            try {
+                                if (holder[0].isCancelled()) {
+                                    return;
+                                }
+                                ScheduledFuture<?> current = pendingBotRematchResponses.get(roomId);
+                                if (current != holder[0]) {
+                                    return;
+                                }
+                                roomGameStateService.syncRoomFromDbIfBehind(room);
+                                Integer requester = room.getPendingRematchRequesterColor();
+                                if (requester == null) {
+                                    return;
+                                }
+                                int botColor = requester == Stone.BLACK ? Stone.WHITE : Stone.BLACK;
+                                if ((botColor == Stone.WHITE && !room.isWhiteIsBot())
+                                        || (botColor == Stone.BLACK && !room.isBlackIsBot())) {
+                                    return;
+                                }
+                                boolean reject = botShouldRejectPendingRequest(room);
+                                String err =
+                                        reject
+                                                ? room.declineRematch(botColor)
+                                                : room.acceptRematch(botColor);
+                                if (err != null) {
+                                    broadcastState(room);
+                                    return;
+                                }
+                                if (!roomGameStateService.tryPersist(room)) {
+                                    roomGameStateService.forceReloadFromDb(room);
+                                    broadcastState(room);
+                                    return;
+                                }
+                                if (reject) {
+                                    WebSocketSession req =
+                                            requester == Stone.BLACK
+                                                    ? room.getBlackSession()
+                                                    : room.getWhiteSession();
+                                    sendToSession(req, rematchDeclinedNotice());
+                                }
+                                broadcastState(room);
+                                if (!reject) {
+                                    maybePlayBot(room);
+                                }
+                            } finally {
+                                pendingBotRematchResponses.remove(roomId, holder[0]);
+                            }
+                        },
+                        delayMs,
+                        TimeUnit.MILLISECONDS);
+        pendingBotRematchResponses.put(roomId, holder[0]);
+    }
+
+    /**
+     * 人机对黑方悔棋：延迟 1~3 秒；随机匹配约 70% 拒绝，其它人机房约 70% 同意。
      */
     private void scheduleBotUndoResponse(GameRoom room) {
         String roomId = room.getRoomId();
@@ -963,7 +1078,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                                         || room.getPendingUndoRequesterColor() != Stone.BLACK) {
                                     return;
                                 }
-                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                boolean reject = botShouldRejectPendingRequest(room);
                                 String err =
                                         reject
                                                 ? room.rejectUndo(Stone.WHITE)
@@ -1012,7 +1127,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                                         || room.getPendingUndoRequesterColor() != Stone.WHITE) {
                                     return;
                                 }
-                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                boolean reject = botShouldRejectPendingRequest(room);
                                 String err =
                                         reject
                                                 ? room.rejectUndo(Stone.BLACK)
@@ -1037,7 +1152,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         pendingBotUndoResponses.put(roomId, holder[0]);
     }
 
-    /** 人机对黑方和棋：延迟 1~3 秒后，70% 同意、30% 拒绝。 */
+    /** 人机对黑方和棋：延迟 1~3 秒；随机匹配约 70% 拒绝，其它人机房约 70% 同意。 */
     private void scheduleBotDrawResponse(GameRoom room) {
         String roomId = room.getRoomId();
         cancelPendingBotDrawResponse(roomId);
@@ -1061,7 +1176,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                                         || room.getPendingDrawRequesterColor() != Stone.BLACK) {
                                     return;
                                 }
-                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                boolean reject = botShouldRejectPendingRequest(room);
                                 String err =
                                         reject
                                                 ? room.rejectDraw(Stone.WHITE)
@@ -1109,7 +1224,7 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
                                         || room.getPendingDrawRequesterColor() != Stone.WHITE) {
                                     return;
                                 }
-                                boolean reject = ThreadLocalRandom.current().nextDouble() < 0.3;
+                                boolean reject = botShouldRejectPendingRequest(room);
                                 String err =
                                         reject
                                                 ? room.rejectDraw(Stone.BLACK)
@@ -1155,10 +1270,23 @@ public class GomokuWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    private void cancelPendingBotRematchResponse(String roomId) {
+        ScheduledFuture<?> f = pendingBotRematchResponses.remove(roomId);
+        if (f != null) {
+            f.cancel(false);
+        }
+    }
+
+    /** 步时/局时终局后取消人机延迟任务（轮询、心跳等路径调用）。 */
+    public void cancelPendingBotTasksForRoom(String roomId) {
+        cancelPendingBotTasks(roomId);
+    }
+
     private void cancelPendingBotTasks(String roomId) {
         cancelPendingBotMove(roomId);
         cancelPendingBotUndoResponse(roomId);
         cancelPendingBotDrawResponse(roomId);
+        cancelPendingBotRematchResponse(roomId);
     }
 
     @Override

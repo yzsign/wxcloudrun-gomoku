@@ -1190,7 +1190,8 @@ public class GameRoom {
             if (pendingDrawRequesterColor != null) {
                 return "请先处理和棋申请";
             }
-            if (!puzzleRoom && whiteIsBot && color == Stone.BLACK) {
+            /** 随机匹配：人机延迟应答（约 70% 拒绝）；非匹配房仍立即开局 */
+            if (!puzzleRoom && !randomMatch && whiteIsBot && color == Stone.BLACK) {
                 resetMatch();
                 return null;
             }
