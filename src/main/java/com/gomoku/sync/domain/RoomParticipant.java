@@ -24,6 +24,8 @@ public class RoomParticipant {
     private boolean puzzleRoom;
     /** 随机匹配队列创建的房间（POST /api/match/random）；好友房为 false */
     private boolean randomMatch;
+    /** 是否计入天梯 Elo 与胜负统计；休闲好友房为 false */
+    private boolean ranked;
     /** 与 createPuzzleFriendRoom 写入一致，供好友进房时重置盘面 */
     private String puzzleInitBoardJson;
     private Integer puzzleSideToMove;
@@ -146,6 +148,14 @@ public class RoomParticipant {
 
     public void setRandomMatch(boolean randomMatch) {
         this.randomMatch = randomMatch;
+    }
+
+    public boolean isRanked() {
+        return ranked;
+    }
+
+    public void setRanked(boolean ranked) {
+        this.ranked = ranked;
     }
 
     public String getPuzzleInitBoardJson() {

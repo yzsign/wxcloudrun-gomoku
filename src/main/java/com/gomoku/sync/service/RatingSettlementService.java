@@ -139,24 +139,29 @@ public class RatingSettlementService {
                             existingDay);
             boolean randomExisting =
                     rpExisting != null && rpExisting.isRandomMatch();
+            boolean unrankedExisting = rpExisting != null && !rpExisting.isRanked();
             int bApDelta =
-                    puzzleExisting
-                            ? pfExisting[0]
-                            : activityPointsDeltaForSide(
-                                    true,
-                                    existingGame.getOutcome(),
-                                    existingGame.getTotalSteps(),
-                                    ran,
-                                    randomExisting);
+                    unrankedExisting
+                            ? 0
+                            : puzzleExisting
+                                    ? pfExisting[0]
+                                    : activityPointsDeltaForSide(
+                                            true,
+                                            existingGame.getOutcome(),
+                                            existingGame.getTotalSteps(),
+                                            ran,
+                                            randomExisting);
             int wApDelta =
-                    puzzleExisting
-                            ? pfExisting[1]
-                            : activityPointsDeltaForSide(
-                                    false,
-                                    existingGame.getOutcome(),
-                                    existingGame.getTotalSteps(),
-                                    ran,
-                                    randomExisting);
+                    unrankedExisting
+                            ? 0
+                            : puzzleExisting
+                                    ? pfExisting[1]
+                                    : activityPointsDeltaForSide(
+                                            false,
+                                            existingGame.getOutcome(),
+                                            existingGame.getTotalSteps(),
+                                            ran,
+                                            randomExisting);
             boolean cBlack = callerUserId == existingGame.getBlackUserId();
             return new SettleGameResponse(
                     existingId,
@@ -228,6 +233,22 @@ public class RatingSettlementService {
         }
         User black = blackId == idLo ? uLo : uHi;
         User white = blackId == idLo ? uHi : uLo;
+
+        if (!rp.isRanked()) {
+            return settleUnrankedRoom(
+                    callerUserId,
+                    req,
+                    rp,
+                    black,
+                    white,
+                    blackId,
+                    whiteId,
+                    outcome,
+                    steps,
+                    matchRound,
+                    runaway,
+                    runawayUid);
+        }
 
         /**
          * 人机可能在黑或白（随机匹配 50% 换座后人类执白）：须由人类座位提交。
@@ -632,6 +653,65 @@ public class RatingSettlementService {
             return;
         }
         u.setLowTrust(u.getRunawayCount() * 100 > tg * 15);
+    }
+
+    /**
+     * 休闲房：记录对局与回放，不修改 Elo、胜负统计与团团积分。
+     */
+    private SettleGameResponse settleUnrankedRoom(
+            long callerUserId,
+            SettleGameRequest req,
+            RoomParticipant rp,
+            User black,
+            User white,
+            long blackId,
+            long whiteId,
+            String outcome,
+            int steps,
+            int matchRound,
+            boolean runaway,
+            Long runawayUid) {
+        int blackEloBefore = black.getEloScore();
+        int whiteEloBefore = white.getEloScore();
+
+        GameRecord game = new GameRecord();
+        game.setRoomId(req.getRoomId());
+        game.setMatchRound(matchRound);
+        game.setBlackUserId(blackId);
+        game.setWhiteUserId(whiteId);
+        game.setTotalSteps(steps);
+        game.setOutcome(outcome);
+        game.setRunawayUserId(runawayUid);
+        game.setBlackEloBefore(blackEloBefore);
+        game.setWhiteEloBefore(whiteEloBefore);
+        game.setBlackEloAfter(blackEloBefore);
+        game.setWhiteEloAfter(whiteEloBefore);
+        game.setBlackEloDelta(0);
+        game.setWhiteEloDelta(0);
+        game.setMovesJson(resolveMovesJson(req, matchRound, steps));
+        game.setBlackPieceSkinId(
+                pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(blackId));
+        game.setWhitePieceSkinId(
+                pieceSkinSelectionService.resolveEquippedPieceSkinForBroadcast(whiteId));
+        gameMapper.insert(game);
+        long gameId = game.getId() != null ? game.getId() : 0L;
+
+        boolean cBlack = callerUserId == blackId;
+        return new SettleGameResponse(
+                gameId,
+                blackEloBefore,
+                whiteEloBefore,
+                0,
+                0,
+                black.getActivityPoints(),
+                white.getActivityPoints(),
+                0,
+                0,
+                cBlack ? blackEloBefore : whiteEloBefore,
+                0,
+                cBlack ? black.getActivityPoints() : white.getActivityPoints(),
+                0,
+                cBlack);
     }
 
     private void insertLog(

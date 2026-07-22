@@ -66,16 +66,35 @@ public class RoomService {
     }
 
     /**
+     * 6 位数字房号（100000–999999），便于口头告知与输入；冲突时重试。
+     */
+    private String allocateRoomId() {
+        ThreadLocalRandom rnd = ThreadLocalRandom.current();
+        for (int attempt = 0; attempt < 32; attempt++) {
+            String roomId = String.format("%06d", rnd.nextInt(900_000) + 100_000);
+            if (rooms.containsKey(roomId)) {
+                continue;
+            }
+            if (roomParticipantMapper.selectByRoomId(roomId) != null) {
+                continue;
+            }
+            return roomId;
+        }
+        throw new IllegalStateException("无法分配房间号，请稍后重试");
+    }
+
+    /**
      * @param randomMatch true 表示随机匹配队列创建（与 POST /api/rooms 好友房区分）
      */
     public GameRoom createRoom(long blackUserId, boolean randomMatch) {
-        String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String roomId = allocateRoomId();
         String blackToken = UUID.randomUUID().toString();
         GameRoom room = new GameRoom(roomId, boardSize, blackToken, blackUserId);
         room.setRandomMatch(randomMatch);
+        room.setRanked(randomMatch);
         rooms.put(roomId, room);
         try {
-            roomParticipantMapper.insertBlack(roomId, blackUserId, blackToken, randomMatch);
+            roomParticipantMapper.insertBlack(roomId, blackUserId, blackToken, randomMatch, randomMatch);
             roomGameStateService.insertInitial(roomId);
         } catch (Exception e) {
             rooms.remove(roomId);
@@ -93,7 +112,7 @@ public class RoomService {
         if (sideToMove != Stone.BLACK && sideToMove != Stone.WHITE) {
             throw new IllegalArgumentException("sideToMove 须为 1（黑）或 2（白）");
         }
-        String roomId = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String roomId = allocateRoomId();
         String blackToken = UUID.randomUUID().toString();
         String spectatorToken = UUID.randomUUID().toString();
         GameRoom room = new GameRoom(roomId, boardSize, blackToken, creatorUserId);
@@ -148,6 +167,7 @@ public class RoomService {
         GameRoom room =
                 new GameRoom(rp.getRoomId(), boardSize, rp.getBlackToken(), rp.getBlackUserId());
         room.setRandomMatch(rp.isRandomMatch());
+        room.setRanked(rp.isRanked());
         if (rp.getFriendWatchToken() != null && !rp.getFriendWatchToken().isEmpty()) {
             room.setFriendWatchToken(rp.getFriendWatchToken());
         }

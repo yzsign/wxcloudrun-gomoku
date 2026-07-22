@@ -96,6 +96,9 @@ public class GameRoom {
      */
     private boolean randomMatch;
 
+    /** 是否计入天梯；休闲好友房为 false，与 room_participants.ranked 一致 */
+    private boolean ranked = true;
+
     /**
      * 好友 PvP：双方真人均曾同时在线（与 STATE 黑/白“在位”判断一致，含集群连接）；为 true 后不因单方断线再进入「等好友进房」式读秒暂停。
      */
@@ -261,6 +264,14 @@ public class GameRoom {
 
     public void setRandomMatch(boolean randomMatch) {
         this.randomMatch = randomMatch;
+    }
+
+    public boolean isRanked() {
+        return ranked;
+    }
+
+    public void setRanked(boolean ranked) {
+        this.ranked = ranked;
     }
 
     /**

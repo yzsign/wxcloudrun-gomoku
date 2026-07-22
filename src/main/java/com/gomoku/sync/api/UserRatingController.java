@@ -106,6 +106,9 @@ public class UserRatingController {
                 boardSkillLoveSlot = row.getItemId();
             }
         }
+        if ("cyberpunk".equals(themeSlot)) {
+            themeSlot = "classic";
+        }
         String pieceSkinOut = pieceSlot != null && !pieceSlot.isEmpty() ? pieceSlot : u.getPieceSkinId();
         boolean daggerEquipped =
                 boardSkillSlot != null

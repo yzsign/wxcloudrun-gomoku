@@ -83,7 +83,9 @@ public class RoomController {
                     .body(new ApiError("UNAUTHORIZED", "请先登录（需 Authorization: Bearer sessionToken）"));
         }
         GameRoom room = roomService.createRoom(uid.get());
-        CreateRoomResponse body = new CreateRoomResponse(room.getRoomId(), room.getBlackToken(), room.getSize());
+        CreateRoomResponse body =
+                new CreateRoomResponse(
+                        room.getRoomId(), room.getBlackToken(), room.getSize(), room.isRanked());
         return ResponseEntity
                 .status(HttpStatus.CREATED)
                 .location(ServletUriComponentsBuilder.fromCurrentContextPath()
@@ -103,7 +105,9 @@ public class RoomController {
         if (room == null) {
             return ResponseEntity.notFound().build();
         }
-        return ResponseEntity.ok(new RoomResource(room.getRoomId(), room.getSize(), room.hasGuest()));
+        return ResponseEntity.ok(
+                new RoomResource(
+                        room.getRoomId(), room.getSize(), room.hasGuest(), room.isRanked()));
     }
 
     /**
@@ -196,7 +200,8 @@ public class RoomController {
                 new JoinRoomResponse(
                         room != null ? room.getSize() : roomService.getBoardSize(),
                         jr.getGuestToken(),
-                        yourColor));
+                        yourColor,
+                        room == null || room.isRanked()));
     }
 
     /**

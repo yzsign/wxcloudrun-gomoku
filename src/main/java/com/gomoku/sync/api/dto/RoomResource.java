@@ -8,11 +8,17 @@ public class RoomResource {
     private final String roomId;
     private final int boardSize;
     private final boolean guestJoined;
+    private final boolean ranked;
 
-    public RoomResource(String roomId, int boardSize, boolean guestJoined) {
+    public RoomResource(String roomId, int boardSize, boolean guestJoined, boolean ranked) {
         this.roomId = roomId;
         this.boardSize = boardSize;
         this.guestJoined = guestJoined;
+        this.ranked = ranked;
+    }
+
+    public RoomResource(String roomId, int boardSize, boolean guestJoined) {
+        this(roomId, boardSize, guestJoined, true);
     }
 
     public String getRoomId() {
@@ -25,5 +31,9 @@ public class RoomResource {
 
     public boolean isGuestJoined() {
         return guestJoined;
+    }
+
+    public boolean isRanked() {
+        return ranked;
     }
 }
