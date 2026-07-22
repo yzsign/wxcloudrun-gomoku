@@ -34,8 +34,8 @@ public class GameRoom {
     /** 残局好友房：黑方为人机时由服务端代下黑棋 */
     private boolean blackIsBot;
     /** 白方为人机时：该人机账号在 DB 中配置的搜索深度区间（入座时写入；每步在区间内随机） */
-    private int botSearchDepthMin = 2;
-    private int botSearchDepthMax = 3;
+    private int botSearchDepthMin = 5;
+    private int botSearchDepthMax = 8;
     /** 白方为人机时：BotAiStyle 枚举 ordinal，与 room_participants.bot_ai_style 一致 */
     private int botAiStyleOrdinal;
     private final int[][] board;

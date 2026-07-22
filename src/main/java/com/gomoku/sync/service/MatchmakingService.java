@@ -223,7 +223,10 @@ public class MatchmakingService {
             if (room.hasGuest()) {
                 return AssignRandomBotResult.of(FallbackBotOutcome.HAS_GUEST);
             }
-            Long botId = userMapper.selectRandomBotId();
+            Long botId = userMapper.selectRandomMatchBotId();
+            if (botId == null) {
+                botId = userMapper.selectRandomBotId();
+            }
             if (botId == null) {
                 return AssignRandomBotResult.of(FallbackBotOutcome.NO_BOTS);
             }
@@ -236,12 +239,19 @@ public class MatchmakingService {
                 }
                 return AssignRandomBotResult.of(FallbackBotOutcome.ROOM_NOT_FOUND);
             }
-            int dmin = 2;
-            int dmax = 3;
+            int dmin = 5;
+            int dmax = 8;
             User botUser = userMapper.selectById(botId);
             if (botUser != null) {
                 dmin = Math.max(1, botUser.getBotSearchDepthMin());
                 dmax = Math.max(1, botUser.getBotSearchDepthMax());
+                if (dmin > dmax) {
+                    int t = dmin;
+                    dmin = dmax;
+                    dmax = t;
+                }
+                dmin = Math.min(12, Math.max(5, dmin + 2));
+                dmax = Math.min(12, Math.max(7, dmax + 2));
                 if (dmin > dmax) {
                     int t = dmin;
                     dmin = dmax;

@@ -180,8 +180,8 @@ public class RoomService {
         if (rp.isWhiteIsBot() || rp.isBlackIsBot()) {
             room.setWhiteIsBot(rp.isWhiteIsBot());
             room.setBlackIsBot(rp.isBlackIsBot());
-            int dmin = rp.getBotSearchDepthMin() != null ? rp.getBotSearchDepthMin() : 2;
-            int dmax = rp.getBotSearchDepthMax() != null ? rp.getBotSearchDepthMax() : 3;
+            int dmin = rp.getBotSearchDepthMin() != null ? rp.getBotSearchDepthMin() : 5;
+            int dmax = rp.getBotSearchDepthMax() != null ? rp.getBotSearchDepthMax() : 8;
             if (dmin > dmax) {
                 int t = dmin;
                 dmin = dmax;

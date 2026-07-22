@@ -117,6 +117,12 @@
         SELECT id FROM users WHERE is_bot = 1 ORDER BY RAND() LIMIT 1
     </select>
 
+    <select id="selectRandomMatchBotId" resultType="java.lang.Long">
+        SELECT id FROM users
+        WHERE is_bot = 1 AND bot_search_depth_max >= 5
+        ORDER BY RAND() LIMIT 1
+    </select>
+
     <!-- 全量写入天梯统计；缺行时插入，避免仅 UPDATE 导致 0 行 -->
     <insert id="updateRatingProfile">
         INSERT INTO user_rating (

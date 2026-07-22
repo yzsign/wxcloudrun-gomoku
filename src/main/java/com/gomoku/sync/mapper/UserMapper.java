@@ -30,4 +30,7 @@ public interface UserMapper {
 
     /** 随机匹配人机：从 is_bot=1 的用户中任选其一 */
     Long selectRandomBotId();
+
+    /** 随机匹配：优先选用搜索深度较高的人机（max≥5），无则回落全量随机 */
+    Long selectRandomMatchBotId();
 }

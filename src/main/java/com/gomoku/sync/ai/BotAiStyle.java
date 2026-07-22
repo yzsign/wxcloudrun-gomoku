@@ -6,14 +6,14 @@ import java.util.concurrent.ThreadLocalRandom;
  * 随机匹配人机棋风：影响评估权重、候选排序；部分风格在根节点从若干相近最优解中随机，增加变化。
  */
 public enum BotAiStyle {
-    /** 与历史默认一致 */
-    BALANCED(1.0, 1.0, 1.0, 1.0, false, 0),
+    /** 与历史默认一致；根节点在相近最优解中随机以增加变化 */
+    BALANCED(1.0, 1.0, 1.0, 1.0, true, 5_000),
     /** 偏重进攻与连片 */
-    AGGRESSIVE(1.14, 0.94, 1.2, 0.86, false, 0),
+    AGGRESSIVE(1.14, 0.94, 1.2, 0.86, true, 4_000),
     /** 偏重挡对方与消势 */
-    DEFENSIVE(0.94, 1.14, 0.86, 1.2, false, 0),
+    DEFENSIVE(0.94, 1.14, 0.86, 1.2, true, 4_000),
     /** 在若干分差内的最优解中随机，棋路更不可预测 */
-    CREATIVE(1.0, 1.0, 1.0, 1.0, true, 12_000);
+    CREATIVE(1.0, 1.0, 1.0, 1.0, true, 8_000);
 
     private final double orderMyW;
     private final double orderOppW;
