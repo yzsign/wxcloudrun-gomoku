@@ -7,13 +7,28 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 开局库（与前端 opening_book.js 对齐）：天元、RIF 白 2 八邻、黑 3 定式表。
+ * 开局库（与前端 opening_book.js 对齐）：黑 1 在中心 5×5 随机、RIF 白 2 八邻、黑 3 定式表。
  * 候选点随机选取，避免人机每局走相同开局。
  */
 public final class GomokuOpeningBook {
 
     private static final int SIZE = 15;
     private static final int CENTER = 7;
+
+    /** 15 路黑 1 池：中心 5×5（与 RIF 黑 3 活动区一致，共 25 点） */
+    private static final int BLACK_FIRST_BOX_MIN = 5;
+    private static final int BLACK_FIRST_BOX_MAX = 9;
+    private static final int[][] BLACK_FIRST_POINTS_15 = buildBlackFirstPoints15();
+
+    private static int[][] buildBlackFirstPoints15() {
+        List<int[]> list = new ArrayList<>(25);
+        for (int r = BLACK_FIRST_BOX_MIN; r <= BLACK_FIRST_BOX_MAX; r++) {
+            for (int c = BLACK_FIRST_BOX_MIN; c <= BLACK_FIRST_BOX_MAX; c++) {
+                list.add(new int[] {r, c});
+            }
+        }
+        return list.toArray(new int[0][]);
+    }
 
     private static final int[][] BLACK3_DIRECT =
             new int[][] {
@@ -35,7 +50,7 @@ public final class GomokuOpeningBook {
         }
         int stones = countStones(board, size);
         if (stones == 0 && aiColor == Stone.BLACK) {
-            return new int[] {CENTER, CENTER};
+            return pickRandomBlackFirstMove(size);
         }
         if (stones == 1 && aiColor == Stone.WHITE) {
             int[] black = findStone(board, size, Stone.BLACK);
@@ -251,5 +266,17 @@ public final class GomokuOpeningBook {
             return null;
         }
         return list.get(ThreadLocalRandom.current().nextInt(list.size()));
+    }
+
+    /** 空盘黑 1：15 路在中心 5×5 均匀随机；非 15 路仅天元 */
+    public static int[] pickRandomBlackFirstMove(int size) {
+        if (size == SIZE) {
+            int[] p =
+                    BLACK_FIRST_POINTS_15[
+                            ThreadLocalRandom.current().nextInt(BLACK_FIRST_POINTS_15.length)];
+            return new int[] {p[0], p[1]};
+        }
+        int c = size / 2;
+        return new int[] {c, c};
     }
 }

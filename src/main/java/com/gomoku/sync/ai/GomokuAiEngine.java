@@ -121,7 +121,11 @@ public final class GomokuAiEngine {
         int opp = opposite(aiColor);
         int stones = countStones(board, size);
         if (stones == 0) {
-            return new int[]{size / 2, size / 2};
+            int[] open = GomokuOpeningBook.getJosekiMove(board, size, aiColor);
+            if (open != null) {
+                return open;
+            }
+            return new int[] {size / 2, size / 2};
         }
 
         int[] win = findWinningMove(board, size, aiColor);
@@ -139,19 +143,20 @@ public final class GomokuAiEngine {
             return fallbackMoveFromCandidates(board, size, aiColor, st);
         }
 
+        /** 开局定式：须在 forced 之前（浅盘 forced 易误触，且随机匹配深度 7+ 时也要走定式随机） */
+        if (stones <= 2) {
+            int[] joseki = GomokuOpeningBook.getJosekiMove(board, size, aiColor);
+            if (joseki != null && board[joseki[0]][joseki[1]] == Stone.EMPTY) {
+                return joseki;
+            }
+        }
+
         int[] forced = findForcedPriorityMove(board, size, aiColor);
         if (forced != null) {
             return forced;
         }
         if (timeUp()) {
             return fallbackMoveFromCandidates(board, size, aiColor, st);
-        }
-
-        if (stones <= 2 && searchDepth <= 4) {
-            int[] joseki = GomokuOpeningBook.getJosekiMove(board, size, aiColor);
-            if (joseki != null && board[joseki[0]][joseki[1]] == Stone.EMPTY) {
-                return joseki;
-            }
         }
 
         List<int[]> cands = getCandidates(board, size);
