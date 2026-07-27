@@ -3,6 +3,8 @@ package com.gomoku.sync.mapper;
 import com.gomoku.sync.domain.User;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 public interface UserMapper {
 
     User selectByOpenid(@Param("openid") String openid);
@@ -33,4 +35,7 @@ public interface UserMapper {
 
     /** 随机匹配：优先选用搜索深度较高的人机（max≥5），无则回落全量随机 */
     Long selectRandomMatchBotId();
+
+    /** 天梯榜：非人机，按 rule.md §8.2 排序，取前 limit 名 */
+    List<User> selectLeaderboardUsers(@Param("limit") int limit);
 }

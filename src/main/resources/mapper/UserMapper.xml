@@ -123,6 +123,19 @@
         ORDER BY RAND() LIMIT 1
     </select>
 
+    <select id="selectLeaderboardUsers" resultMap="UserResult">
+        SELECT <include refid="UserSelectColumns"/>
+        <include refid="UserJoinFrom"/>
+        WHERE u.is_bot = 0
+        ORDER BY
+            COALESCE(r.elo_score, 1200) DESC,
+            (CASE WHEN COALESCE(r.total_games, 0) > 0
+                THEN r.win_count * 1.0 / r.total_games ELSE 0 END) DESC,
+            COALESCE(r.total_games, 0) DESC,
+            u.created_at ASC
+        LIMIT #{limit}
+    </select>
+
     <!-- 全量写入天梯统计；缺行时插入，避免仅 UPDATE 导致 0 行 -->
     <insert id="updateRatingProfile">
         INSERT INTO user_rating (
