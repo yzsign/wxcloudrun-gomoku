@@ -17,6 +17,9 @@ public class CheckinResponse {
     private final boolean newlyUnlockedTuanMoe;
     private final String checkinLastYmd;
     private final List<String> checkinHistory;
+    /** 补签消耗积分；普通签到为 0 */
+    private final int pointsSpent;
+    private final boolean makeup;
 
     public CheckinResponse(
             boolean ok,
@@ -28,6 +31,32 @@ public class CheckinResponse {
             boolean newlyUnlockedTuanMoe,
             String checkinLastYmd,
             List<String> checkinHistory) {
+        this(
+                ok,
+                alreadySigned,
+                streak,
+                rewardPoints,
+                totalPoints,
+                tuanMoeUnlocked,
+                newlyUnlockedTuanMoe,
+                checkinLastYmd,
+                checkinHistory,
+                0,
+                false);
+    }
+
+    public CheckinResponse(
+            boolean ok,
+            boolean alreadySigned,
+            int streak,
+            int rewardPoints,
+            int totalPoints,
+            boolean tuanMoeUnlocked,
+            boolean newlyUnlockedTuanMoe,
+            String checkinLastYmd,
+            List<String> checkinHistory,
+            int pointsSpent,
+            boolean makeup) {
         this.ok = ok;
         this.alreadySigned = alreadySigned;
         this.streak = streak;
@@ -37,6 +66,8 @@ public class CheckinResponse {
         this.newlyUnlockedTuanMoe = newlyUnlockedTuanMoe;
         this.checkinLastYmd = checkinLastYmd;
         this.checkinHistory = checkinHistory != null ? checkinHistory : Collections.emptyList();
+        this.pointsSpent = Math.max(0, pointsSpent);
+        this.makeup = makeup;
     }
 
     public boolean isOk() {
@@ -73,5 +104,13 @@ public class CheckinResponse {
 
     public List<String> getCheckinHistory() {
         return checkinHistory;
+    }
+
+    public int getPointsSpent() {
+        return pointsSpent;
+    }
+
+    public boolean isMakeup() {
+        return makeup;
     }
 }

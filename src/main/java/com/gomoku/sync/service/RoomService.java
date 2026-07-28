@@ -2,6 +2,7 @@ package com.gomoku.sync.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gomoku.sync.ai.BotAiStyle;
+import com.gomoku.sync.domain.DailyPuzzleBoardValidation;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.RoomParticipant;
 import com.gomoku.sync.domain.Stone;
@@ -108,7 +109,7 @@ public class RoomService {
      * 好友通过 {@link #joinRoom(String, long)} 入座白方。
      */
     public GameRoom createPuzzleFriendRoom(long creatorUserId, int[][] board, int sideToMove) {
-        DailyPuzzleAdminService.validateBoardCells(board, boardSize);
+        DailyPuzzleBoardValidation.validateBoardCells(board, boardSize);
         if (sideToMove != Stone.BLACK && sideToMove != Stone.WHITE) {
             throw new IllegalArgumentException("sideToMove 须为 1（黑）或 2（白）");
         }
@@ -211,7 +212,7 @@ public class RoomService {
                 try {
                     int[][] tpl =
                             objectMapper.readValue(rp.getPuzzleInitBoardJson(), int[][].class);
-                    DailyPuzzleAdminService.validateBoardCells(tpl, boardSize);
+                    DailyPuzzleBoardValidation.validateBoardCells(tpl, boardSize);
                     room.setPuzzleTemplate(tpl, rp.getPuzzleSideToMove());
                 } catch (Exception ignored) {
                     // 无模板时好友进房无法启用人机，兼容旧数据

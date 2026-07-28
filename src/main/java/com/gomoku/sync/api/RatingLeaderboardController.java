@@ -38,7 +38,7 @@ public class RatingLeaderboardController {
     @GetMapping("/leaderboard")
     public ResponseEntity<?> leaderboard(
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestParam(value = "limit", defaultValue = "100") int limit) {
+            @RequestParam(value = "limit", defaultValue = "30") int limit) {
         Optional<Long> uid = sessionJwtService.parseAuthorizationBearer(authorization);
         if (!uid.isPresent()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

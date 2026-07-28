@@ -41,6 +41,14 @@ public final class GomokuAiEngine {
     private static final double DOUBLE_LIVE_TWO_SHAPE_BUMP = 220.0;
     /** 活三+活二混合叉（与 gomoku.js bump 720 一致） */
     private static final double MIXED_L3_L2_BUMP = 720.0;
+    /** VCF（连续冲四）最大递归层数 */
+    private static final int VCF_MAX_PLIES = 24;
+    /** VCF 每层冲四候选上限 */
+    private static final int VCF_MAX_CANDIDATES = 28;
+    /** VCT 候选上限（含活三） */
+    private static final int VCT_MAX_CANDIDATES = 36;
+    /** 防守必防点分支上限 */
+    private static final int VCT_MAX_DEFENSE_BRANCH = 10;
 
     private static final ThreadLocal<Long> DEADLINE_NANOS = new ThreadLocal<>();
     private static final ThreadLocal<BotAiStyle> AI_STYLE = new ThreadLocal<>();
@@ -159,6 +167,30 @@ public final class GomokuAiEngine {
             return fallbackMoveFromCandidates(board, size, aiColor, st);
         }
 
+        int[] vcf = findVcfMove(board, size, aiColor);
+        if (vcf != null) {
+            return vcf;
+        }
+        if (timeUp()) {
+            return fallbackMoveFromCandidates(board, size, aiColor, st);
+        }
+
+        int[] vct = findVctMove(board, size, aiColor);
+        if (vct != null) {
+            return vct;
+        }
+        if (timeUp()) {
+            return fallbackMoveFromCandidates(board, size, aiColor, st);
+        }
+
+        int[] blockCt = findOpponentContinuousThreatBlock(board, size, aiColor);
+        if (blockCt != null) {
+            return blockCt;
+        }
+        if (timeUp()) {
+            return fallbackMoveFromCandidates(board, size, aiColor, st);
+        }
+
         List<int[]> cands = getCandidates(board, size);
         if (cands.isEmpty()) {
             return new int[]{size / 2, size / 2};
@@ -174,40 +206,60 @@ public final class GomokuAiEngine {
         int bestR = cands.get(0)[0];
         int bestC = cands.get(0)[1];
         int bestScore = Integer.MIN_VALUE;
-        int plyDepth = searchDepth - 1;
-        for (int[] m : cands) {
+        int minDepth = searchDepth <= 3 ? 2 : Math.max(2, searchDepth - 4);
+        for (int depth = minDepth; depth <= searchDepth; depth++) {
             if (timeUp()) {
                 break;
             }
-            int r = m[0];
-            int c = m[1];
-            if (board[r][c] != Stone.EMPTY) {
-                continue;
-            }
-            board[r][c] = aiColor;
-            if (WinChecker.checkWin(board, size, r, c, aiColor)) {
+            List<int[]> iterMoves = new ArrayList<>(cap);
+            List<Integer> iterScores = new ArrayList<>(cap);
+            int iterBestR = bestR;
+            int iterBestC = bestC;
+            int iterBestScore = Integer.MIN_VALUE;
+            boolean anyScored = false;
+            int plyDepth = depth - 1;
+            for (int[] m : cands) {
+                if (timeUp()) {
+                    break;
+                }
+                int r = m[0];
+                int c = m[1];
+                if (board[r][c] != Stone.EMPTY) {
+                    continue;
+                }
+                board[r][c] = aiColor;
+                if (WinChecker.checkWin(board, size, r, c, aiColor)) {
+                    board[r][c] = Stone.EMPTY;
+                    return new int[] {r, c};
+                }
+                int sc =
+                        minimax(
+                                board,
+                                size,
+                                plyDepth,
+                                false,
+                                aiColor,
+                                opp,
+                                Integer.MIN_VALUE,
+                                Integer.MAX_VALUE,
+                                depth,
+                                1);
                 board[r][c] = Stone.EMPTY;
-                return new int[]{r, c};
+                iterMoves.add(m);
+                iterScores.add(sc);
+                anyScored = true;
+                if (sc > iterBestScore) {
+                    iterBestScore = sc;
+                    iterBestR = r;
+                    iterBestC = c;
+                }
             }
-            int sc =
-                    minimax(
-                            board,
-                            size,
-                            plyDepth,
-                            false,
-                            aiColor,
-                            opp,
-                            Integer.MIN_VALUE,
-                            Integer.MAX_VALUE,
-                            searchDepth,
-                            1);
-            board[r][c] = Stone.EMPTY;
-            rootMoves.add(m);
-            rootScores.add(sc);
-            if (sc > bestScore) {
-                bestScore = sc;
-                bestR = r;
-                bestC = c;
+            if (anyScored) {
+                bestR = iterBestR;
+                bestC = iterBestC;
+                bestScore = iterBestScore;
+                rootMoves = iterMoves;
+                rootScores = iterScores;
             }
         }
         if (rootMoves.isEmpty()) {
@@ -1013,6 +1065,290 @@ public final class GomokuAiEngine {
             }
         }
         return best;
+    }
+
+    /* ---------- VCF / VCT：连续威胁必胜（与 gomoku.js 一致） ---------- */
+
+    private static final class ContinuousThreat {
+        boolean win;
+        int nL4;
+        int nR4;
+        int nL3;
+        boolean independentDoubleRush;
+        boolean doubleLiveThree;
+        boolean liveThreeAndRushFour;
+    }
+
+    private static ContinuousThreat continuousThreatAtStone(
+            int[][] board, int size, int r, int c, int color) {
+        ContinuousThreat t = new ContinuousThreat();
+        if (WinChecker.checkWin(board, size, r, c, color)) {
+            t.win = true;
+            return t;
+        }
+        for (int[] dir : DIRS) {
+            char seg = directionSegmentMerged(board, size, r, c, dir[0], dir[1], color);
+            if (seg == '4') {
+                t.nL4++;
+            } else if (seg == 'R') {
+                t.nR4++;
+            } else if (seg == '3') {
+                t.nL3++;
+            }
+        }
+        t.independentDoubleRush = t.nR4 >= 2 && areIndependentRushFours(board, size, r, c, color);
+        t.doubleLiveThree = t.nL3 >= 2;
+        t.liveThreeAndRushFour = t.nL3 >= 1 && t.nR4 >= 1;
+        return t;
+    }
+
+    private static boolean isTerminalContinuousThreat(ContinuousThreat t) {
+        return t.win
+                || t.nL4 >= 1
+                || t.independentDoubleRush
+                || t.doubleLiveThree
+                || t.liveThreeAndRushFour;
+    }
+
+    private static boolean isVctForcingThreat(ContinuousThreat t, boolean vct) {
+        if (t.win || t.nL4 >= 1 || t.nR4 >= 1) {
+            return true;
+        }
+        if (!vct) {
+            return false;
+        }
+        return t.nL3 >= 1 || t.doubleLiveThree || t.liveThreeAndRushFour;
+    }
+
+    private static boolean isStrongAttackerReply(
+            int[][] board, int size, int r, int c, int color, boolean vct) {
+        ContinuousThreat t = continuousThreatAtStone(board, size, r, c, color);
+        if (isTerminalContinuousThreat(t)) {
+            return true;
+        }
+        if (!vct) {
+            return t.nR4 >= 1;
+        }
+        return t.nR4 >= 1
+                || t.nL3 >= 1
+                || t.doubleLiveThree
+                || t.liveThreeAndRushFour;
+    }
+
+    private static List<int[]> mergeDefensePoints(List<int[]> a, List<int[]> b) {
+        Set<String> seen = new HashSet<>();
+        List<int[]> out = new ArrayList<>();
+        for (int[] m : a) {
+            String key = m[0] + "," + m[1];
+            if (seen.add(key)) {
+                out.add(m);
+            }
+        }
+        for (int[] m : b) {
+            String key = m[0] + "," + m[1];
+            if (seen.add(key)) {
+                out.add(m);
+            }
+        }
+        return out;
+    }
+
+    private static List<int[]> collectRushFourBlockPoints(
+            int[][] board, int size, int r, int c, int color) {
+        Set<String> seen = new HashSet<>();
+        List<int[]> out = new ArrayList<>();
+        for (int[] dir : DIRS) {
+            if (directionSegmentMerged(board, size, r, c, dir[0], dir[1], color) != 'R') {
+                continue;
+            }
+            int[] w = rushWinningCellAlongLine(board, size, r, c, dir[0], dir[1], color);
+            if (w == null || board[w[0]][w[1]] != Stone.EMPTY) {
+                continue;
+            }
+            String key = w[0] + "," + w[1];
+            if (seen.add(key)) {
+                out.add(w);
+            }
+        }
+        return out;
+    }
+
+    private static List<int[]> collectNextTurnCriticalPoints(
+            int[][] board, int size, int attacker, boolean vct) {
+        Set<String> seen = new HashSet<>();
+        List<int[]> out = new ArrayList<>();
+        for (int[] p : getCandidates(board, size)) {
+            if (timeUp()) {
+                break;
+            }
+            int r = p[0];
+            int c = p[1];
+            if (board[r][c] != Stone.EMPTY) {
+                continue;
+            }
+            board[r][c] = attacker;
+            if (isStrongAttackerReply(board, size, r, c, attacker, vct)) {
+                String key = r + "," + c;
+                if (seen.add(key)) {
+                    out.add(new int[] {r, c});
+                }
+            }
+            board[r][c] = Stone.EMPTY;
+        }
+        return out;
+    }
+
+    private static boolean continuousThreatResolveAfterAttack(
+            int[][] board,
+            int size,
+            int ar,
+            int ac,
+            int attacker,
+            int depthLeft,
+            boolean vct) {
+        if (timeUp() || depthLeft <= 0) {
+            return false;
+        }
+        ContinuousThreat t = continuousThreatAtStone(board, size, ar, ac, attacker);
+        if (isTerminalContinuousThreat(t)) {
+            return true;
+        }
+        List<int[]> rushBlocks = collectRushFourBlockPoints(board, size, ar, ac, attacker);
+        if (rushBlocks.size() >= 2) {
+            return true;
+        }
+        List<int[]> nextCrit =
+                vct
+                        ? collectNextTurnCriticalPoints(board, size, attacker, true)
+                        : java.util.Collections.emptyList();
+        if (vct && nextCrit.size() >= 2) {
+            return true;
+        }
+        List<int[]> defenses = mergeDefensePoints(rushBlocks, nextCrit);
+        if (defenses.isEmpty()) {
+            return false;
+        }
+        int defender = opposite(attacker);
+        int limit = Math.min(defenses.size(), VCT_MAX_DEFENSE_BRANCH);
+        for (int di = 0; di < limit; di++) {
+            if (timeUp()) {
+                break;
+            }
+            int[] b = defenses.get(di);
+            if (board[b[0]][b[1]] != Stone.EMPTY) {
+                continue;
+            }
+            board[b[0]][b[1]] = defender;
+            boolean ok = continuousThreatSearchAttacker(board, size, attacker, depthLeft - 1, vct);
+            board[b[0]][b[1]] = Stone.EMPTY;
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<int[]> continuousThreatCandidateMoves(
+            int[][] board, int size, int color, boolean vct) {
+        List<int[]> pool = getCandidates(board, size);
+        List<int[]> forcing = new ArrayList<>();
+        for (int[] m : pool) {
+            int r = m[0];
+            int c = m[1];
+            if (board[r][c] != Stone.EMPTY) {
+                continue;
+            }
+            board[r][c] = color;
+            ContinuousThreat t = continuousThreatAtStone(board, size, r, c, color);
+            board[r][c] = Stone.EMPTY;
+            if (isVctForcingThreat(t, vct)) {
+                forcing.add(m);
+            }
+        }
+        if (forcing.isEmpty()) {
+            return forcing;
+        }
+        sortCandidates(board, size, forcing, color, style());
+        int cap = vct ? VCT_MAX_CANDIDATES : VCF_MAX_CANDIDATES;
+        if (forcing.size() > cap) {
+            return new ArrayList<>(forcing.subList(0, cap));
+        }
+        return forcing;
+    }
+
+    private static boolean continuousThreatSearchAttacker(
+            int[][] board, int size, int attacker, int depthLeft, boolean vct) {
+        if (timeUp() || depthLeft <= 0) {
+            return false;
+        }
+        List<int[]> moves = continuousThreatCandidateMoves(board, size, attacker, vct);
+        for (int[] m : moves) {
+            if (timeUp()) {
+                break;
+            }
+            int r = m[0];
+            int c = m[1];
+            if (board[r][c] != Stone.EMPTY) {
+                continue;
+            }
+            board[r][c] = attacker;
+            if (WinChecker.checkWin(board, size, r, c, attacker)) {
+                board[r][c] = Stone.EMPTY;
+                return true;
+            }
+            if (continuousThreatResolveAfterAttack(
+                    board, size, r, c, attacker, depthLeft, vct)) {
+                board[r][c] = Stone.EMPTY;
+                return true;
+            }
+            board[r][c] = Stone.EMPTY;
+        }
+        return false;
+    }
+
+    private static int[] findContinuousThreatMove(
+            int[][] board, int size, int aiColor, boolean vct) {
+        List<int[]> moves = continuousThreatCandidateMoves(board, size, aiColor, vct);
+        for (int[] m : moves) {
+            if (timeUp()) {
+                break;
+            }
+            int r = m[0];
+            int c = m[1];
+            if (board[r][c] != Stone.EMPTY) {
+                continue;
+            }
+            board[r][c] = aiColor;
+            if (WinChecker.checkWin(board, size, r, c, aiColor)) {
+                board[r][c] = Stone.EMPTY;
+                return new int[] {r, c};
+            }
+            if (continuousThreatResolveAfterAttack(
+                    board, size, r, c, aiColor, VCF_MAX_PLIES, vct)) {
+                board[r][c] = Stone.EMPTY;
+                return new int[] {r, c};
+            }
+            board[r][c] = Stone.EMPTY;
+        }
+        return null;
+    }
+
+    private static int[] findVcfMove(int[][] board, int size, int aiColor) {
+        return findContinuousThreatMove(board, size, aiColor, false);
+    }
+
+    private static int[] findVctMove(int[][] board, int size, int aiColor) {
+        return findContinuousThreatMove(board, size, aiColor, true);
+    }
+
+    private static int[] findOpponentContinuousThreatBlock(
+            int[][] board, int size, int aiColor) {
+        int opp = opposite(aiColor);
+        int[] m = findContinuousThreatMove(board, size, opp, false);
+        if (m != null) {
+            return m;
+        }
+        return findContinuousThreatMove(board, size, opp, true);
     }
 
     /**

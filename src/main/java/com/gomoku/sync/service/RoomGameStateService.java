@@ -1,6 +1,7 @@
 package com.gomoku.sync.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gomoku.sync.domain.DailyPuzzleBoardValidation;
 import com.gomoku.sync.domain.GameRoom;
 import com.gomoku.sync.domain.GameRoomStateSnapshot;
 import com.gomoku.sync.domain.RoomGameStateRow;
@@ -52,7 +53,7 @@ public class RoomGameStateService {
      * 残局好友房：写入给定盘面与行棋方（房主观战，黑座可无 WS）。
      */
     public void insertPuzzleInitial(String roomId, int[][] board, int sideToMove) {
-        DailyPuzzleAdminService.validateBoardCells(board, boardSize);
+        DailyPuzzleBoardValidation.validateBoardCells(board, boardSize);
         if (sideToMove != Stone.BLACK && sideToMove != Stone.WHITE) {
             throw new IllegalArgumentException("sideToMove 须为 1（黑）或 2（白）");
         }

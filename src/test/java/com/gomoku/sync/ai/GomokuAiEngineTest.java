@@ -51,4 +51,23 @@ class GomokuAiEngineTest {
         }
         assertTrue(seen.size() >= 2, "expected varied white second moves, got " + seen);
     }
+
+    /**
+     * 连续冲四杀：黑 7,5–7,8 四子，白仅堵 7,9；黑 7,4 冲四后白必堵 7,10，黑再 7,11 成五（VCF 首着 7,4）。
+     */
+    @Test
+    void vcf_picksFirstForcingRushFour() {
+        int size = 15;
+        int[][] board = emptyBoard(size);
+        int row = 7;
+        board[row][5] = Stone.BLACK;
+        board[row][6] = Stone.BLACK;
+        board[row][7] = Stone.BLACK;
+        board[row][8] = Stone.BLACK;
+        board[row][9] = Stone.WHITE;
+        int[] mv =
+                GomokuAiEngine.chooseMove(
+                        board, size, Stone.BLACK, 8, BotAiStyle.BALANCED);
+        assertTrue(mv[0] == row && mv[1] == 4, "expected VCF opener at 7,4 got " + mv[0] + "," + mv[1]);
+    }
 }

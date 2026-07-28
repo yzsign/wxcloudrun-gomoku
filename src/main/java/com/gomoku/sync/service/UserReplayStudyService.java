@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gomoku.sync.api.dto.GameMoveDto;
 import com.gomoku.sync.api.dto.UserReplayStudyGetResponse;
 import com.gomoku.sync.api.dto.UserReplayStudySaveRequest;
+import com.gomoku.sync.domain.DailyPuzzleBoardValidation;
 import com.gomoku.sync.domain.Stone;
 import com.gomoku.sync.domain.UserReplayStudy;
 import com.gomoku.sync.mapper.UserReplayStudyMapper;
@@ -41,7 +42,7 @@ public class UserReplayStudyService {
             List<GameMoveDto> moves =
                     objectMapper.readValue(row.getMovesJson(), new TypeReference<List<GameMoveDto>>() {});
             int[][] board = objectMapper.readValue(row.getBoardJson(), int[][].class);
-            DailyPuzzleAdminService.validateBoardCells(board, boardSize);
+            DailyPuzzleBoardValidation.validateBoardCells(board, boardSize);
             UserReplayStudyGetResponse r = new UserReplayStudyGetResponse();
             r.setHasData(true);
             r.setBoardSize(boardSize);
@@ -82,7 +83,7 @@ public class UserReplayStudyService {
         validateMovesShape(moves);
         int[][] built = buildBoardFromMoves(moves, step);
         int[][] clientBoard = req.getBoard();
-        DailyPuzzleAdminService.validateBoardCells(clientBoard, boardSize);
+        DailyPuzzleBoardValidation.validateBoardCells(clientBoard, boardSize);
         if (!boardsEqual(built, clientBoard)) {
             throw new IllegalArgumentException("board 与棋谱/replayStep 不一致");
         }

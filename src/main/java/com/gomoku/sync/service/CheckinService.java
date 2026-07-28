@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TreeSet;
@@ -21,7 +23,47 @@ public class CheckinService {
 
     private static final ZoneId CHECKIN_ZONE = ZoneId.of("Asia/Shanghai");
     private static final int DAILY_REWARD_POINTS = 10;
+    private static final int MAKEUP_COST_POINTS = 20;
     private static final int MAX_HISTORY = 500;
+
+    public enum MakeupError {
+        INVALID_DATE,
+        CANNOT_MAKEUP_TODAY,
+        FUTURE_DATE,
+        OUT_OF_RANGE,
+        ALREADY_SIGNED,
+        INSUFFICIENT_POINTS
+    }
+
+    public static final class MakeupOutcome {
+        private final CheckinResponse response;
+        private final MakeupError error;
+
+        private MakeupOutcome(CheckinResponse response, MakeupError error) {
+            this.response = response;
+            this.error = error;
+        }
+
+        public static MakeupOutcome success(CheckinResponse response) {
+            return new MakeupOutcome(response, null);
+        }
+
+        public static MakeupOutcome failure(MakeupError error) {
+            return new MakeupOutcome(null, error);
+        }
+
+        public CheckinResponse getResponse() {
+            return response;
+        }
+
+        public MakeupError getError() {
+            return error;
+        }
+
+        public boolean isOk() {
+            return error == null;
+        }
+    }
 
     private final UserMapper userMapper;
     private final UserCheckinMapper userCheckinMapper;
@@ -82,10 +124,7 @@ public class CheckinService {
         List<String> histList = new ArrayList<>(readHistory(st.getHistoryJson()));
         TreeSet<String> sorted = new TreeSet<>(histList);
         sorted.add(todayStr);
-        List<String> capped = new ArrayList<>(sorted);
-        if (capped.size() > MAX_HISTORY) {
-            capped = new ArrayList<>(capped.subList(capped.size() - MAX_HISTORY, capped.size()));
-        }
+        List<String> capped = capHistory(sorted);
 
         String historyJson;
         try {
@@ -117,6 +156,135 @@ public class CheckinService {
                 !wasUnlocked && nowUnlocked,
                 todayStr,
                 capped);
+    }
+
+    @Transactional
+    public MakeupOutcome checkinMakeup(long userId, String ymdRaw) {
+        if (ymdRaw == null || ymdRaw.trim().isEmpty()) {
+            return MakeupOutcome.failure(MakeupError.INVALID_DATE);
+        }
+        String ymdStr = ymdRaw.trim();
+        LocalDate target;
+        try {
+            target = LocalDate.parse(ymdStr);
+        } catch (DateTimeParseException e) {
+            return MakeupOutcome.failure(MakeupError.INVALID_DATE);
+        }
+        if (!target.toString().equals(ymdStr)) {
+            return MakeupOutcome.failure(MakeupError.INVALID_DATE);
+        }
+
+        LocalDate today = LocalDate.now(CHECKIN_ZONE);
+        if (target.equals(today)) {
+            return MakeupOutcome.failure(MakeupError.CANNOT_MAKEUP_TODAY);
+        }
+        if (target.isAfter(today)) {
+            return MakeupOutcome.failure(MakeupError.FUTURE_DATE);
+        }
+        if (!isMonthInCheckinBrowseRange(target, today)) {
+            return MakeupOutcome.failure(MakeupError.OUT_OF_RANGE);
+        }
+
+        User u = userMapper.selectByIdForUpdate(userId);
+        if (u == null) {
+            return MakeupOutcome.failure(MakeupError.INVALID_DATE);
+        }
+        UserCheckinState st = userCheckinMapper.selectByUserIdForUpdate(userId);
+        if (st == null) {
+            userCheckinMapper.insertInitial(userId);
+            st = userCheckinMapper.selectByUserIdForUpdate(userId);
+        }
+        if (st == null) {
+            return MakeupOutcome.failure(MakeupError.INVALID_DATE);
+        }
+
+        TreeSet<String> sorted = new TreeSet<>(readHistory(st.getHistoryJson()));
+        if (sorted.contains(ymdStr)) {
+            return MakeupOutcome.failure(MakeupError.ALREADY_SIGNED);
+        }
+        if (u.getActivityPoints() < MAKEUP_COST_POINTS) {
+            return MakeupOutcome.failure(MakeupError.INSUFFICIENT_POINTS);
+        }
+
+        sorted.add(ymdStr);
+        List<String> capped = capHistory(sorted);
+
+        String historyJson;
+        try {
+            historyJson = objectMapper.writeValueAsString(capped);
+        } catch (Exception e) {
+            historyJson = "[]";
+        }
+
+        int newPoints = u.getActivityPoints() - MAKEUP_COST_POINTS;
+        String newLast = latestSignedYmdOnOrBefore(sorted, today);
+        int newStreak = computeStreakFromHistory(sorted, today);
+        boolean wasUnlocked = st.isPieceSkinTuanMoeUnlocked();
+        boolean nowUnlocked = wasUnlocked || newStreak >= 7;
+
+        st.setLastCheckinYmd(newLast);
+        st.setStreak(newStreak);
+        st.setHistoryJson(historyJson);
+        st.setPieceSkinTuanMoeUnlocked(nowUnlocked);
+
+        u.setActivityPoints(newPoints);
+        userMapper.updateActivityPoints(u);
+        userCheckinMapper.updateState(st);
+
+        return MakeupOutcome.success(
+                new CheckinResponse(
+                        true,
+                        false,
+                        newStreak,
+                        0,
+                        newPoints,
+                        nowUnlocked,
+                        !wasUnlocked && nowUnlocked,
+                        newLast,
+                        capped,
+                        MAKEUP_COST_POINTS,
+                        true));
+    }
+
+    private static boolean isMonthInCheckinBrowseRange(LocalDate day, LocalDate today) {
+        YearMonth nowYm = YearMonth.from(today);
+        YearMonth targetYm = YearMonth.from(day);
+        long cur = nowYm.getYear() * 12L + (nowYm.getMonthValue() - 1);
+        long t = targetYm.getYear() * 12L + (targetYm.getMonthValue() - 1);
+        return t >= cur - 11 && t <= cur;
+    }
+
+    private static String latestSignedYmdOnOrBefore(TreeSet<String> history, LocalDate today) {
+        String best = null;
+        for (String ymd : history) {
+            LocalDate d = LocalDate.parse(ymd);
+            if (!d.isAfter(today) && (best == null || ymd.compareTo(best) > 0)) {
+                best = ymd;
+            }
+        }
+        return best;
+    }
+
+    private static int computeStreakFromHistory(TreeSet<String> history, LocalDate today) {
+        String anchorYmd = latestSignedYmdOnOrBefore(history, today);
+        if (anchorYmd == null) {
+            return 0;
+        }
+        LocalDate d = LocalDate.parse(anchorYmd);
+        int streak = 0;
+        while (history.contains(d.toString())) {
+            streak++;
+            d = d.minusDays(1);
+        }
+        return streak;
+    }
+
+    private List<String> capHistory(TreeSet<String> sorted) {
+        List<String> capped = new ArrayList<>(sorted);
+        if (capped.size() > MAX_HISTORY) {
+            capped = new ArrayList<>(capped.subList(capped.size() - MAX_HISTORY, capped.size()));
+        }
+        return capped;
     }
 
     private List<String> readHistory(String json) {
