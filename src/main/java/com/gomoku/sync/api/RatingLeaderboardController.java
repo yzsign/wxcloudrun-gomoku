@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 天梯实时榜（rule.md §8.2）；需登录，排除人机账号。
+ * 天梯实时榜（rule.md §8.2）；需登录；人机与真人同一排序规则，客户端不做区分。
  */
 @RestController
 @RequestMapping("/api/rating")

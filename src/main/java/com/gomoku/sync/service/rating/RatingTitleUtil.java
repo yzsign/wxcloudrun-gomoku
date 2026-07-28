@@ -91,6 +91,55 @@ public final class RatingTitleUtil {
         return 11;
     }
 
+    /** 段位序 0～11 对应天梯分下界（含），与 {@link #rankIndexForElo(int)} 分段一致。 */
+    public static int minEloInclusiveForRankIndex(int rankIndex) {
+        if (rankIndex <= 0) {
+            return 0;
+        }
+        if (rankIndex == 1) {
+            return 1000;
+        }
+        if (rankIndex == 2) {
+            return 1200;
+        }
+        if (rankIndex == 3) {
+            return 1400;
+        }
+        if (rankIndex == 4) {
+            return 1600;
+        }
+        if (rankIndex == 5) {
+            return 1800;
+        }
+        if (rankIndex == 6) {
+            return 2000;
+        }
+        if (rankIndex == 7) {
+            return 2200;
+        }
+        if (rankIndex == 8) {
+            return 2350;
+        }
+        if (rankIndex == 9) {
+            return 2500;
+        }
+        if (rankIndex == 10) {
+            return 2700;
+        }
+        return 2900;
+    }
+
+    /** 段位序 0～11 对应天梯分上界（不含）；11 段为 {@link Integer#MAX_VALUE}。 */
+    public static int maxEloExclusiveForRankIndex(int rankIndex) {
+        if (rankIndex < 0) {
+            return minEloInclusiveForRankIndex(0);
+        }
+        if (rankIndex >= 11) {
+            return Integer.MAX_VALUE;
+        }
+        return minEloInclusiveForRankIndex(rankIndex + 1);
+    }
+
     /**
      * 按 {@link User#getEloScore()} 写入内存中的称号，供 {@code updateRatingProfile} 持久化。
      */

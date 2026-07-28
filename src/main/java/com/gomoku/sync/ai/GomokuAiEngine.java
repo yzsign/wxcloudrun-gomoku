@@ -91,7 +91,7 @@ public final class GomokuAiEngine {
             searchDepth = 1;
         }
         searchDepth = Math.min(searchDepth, EFFECTIVE_DEPTH_CAP);
-        long deadline = System.nanoTime() + MOVE_TIME_BUDGET_NANOS;
+        long deadline = System.nanoTime() + moveTimeBudgetNanos(searchDepth);
         DEADLINE_NANOS.set(deadline);
         AI_STYLE.set(style);
         try {
@@ -100,6 +100,20 @@ public final class GomokuAiEngine {
             DEADLINE_NANOS.remove();
             AI_STYLE.remove();
         }
+    }
+
+    /** 深度越高单步预算越长，高段位随机匹配人机更接近客户端「巅峰」强度。 */
+    private static long moveTimeBudgetNanos(int searchDepth) {
+        if (searchDepth >= 11) {
+            return 1_500_000_000L;
+        }
+        if (searchDepth >= 9) {
+            return 1_000_000_000L;
+        }
+        if (searchDepth >= 7) {
+            return 700_000_000L;
+        }
+        return MOVE_TIME_BUDGET_NANOS;
     }
 
     private static BotAiStyle style() {

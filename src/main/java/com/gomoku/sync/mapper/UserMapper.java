@@ -36,6 +36,10 @@ public interface UserMapper {
     /** 随机匹配：优先选用搜索深度较高的人机（max≥5），无则回落全量随机 */
     Long selectRandomMatchBotId();
 
+    /** 随机匹配：人机账号天梯分落在 [minElo, maxElo)（与段位带一致） */
+    Long selectRandomMatchBotIdInEloRange(
+            @Param("minElo") int minElo, @Param("maxElo") int maxElo);
+
     /** 天梯榜：非人机，按 rule.md §8.2 排序，取前 limit 名 */
     List<User> selectLeaderboardUsers(@Param("limit") int limit);
 }

@@ -123,10 +123,19 @@
         ORDER BY RAND() LIMIT 1
     </select>
 
+    <select id="selectRandomMatchBotIdInEloRange" resultType="java.lang.Long">
+        SELECT u.id
+        FROM users u
+        LEFT JOIN user_rating r ON r.user_id = u.id
+        WHERE u.is_bot = 1
+          AND COALESCE(r.elo_score, 1200) &gt;= #{minElo}
+          AND COALESCE(r.elo_score, 1200) &lt; #{maxElo}
+        ORDER BY RAND() LIMIT 1
+    </select>
+
     <select id="selectLeaderboardUsers" resultMap="UserResult">
         SELECT <include refid="UserSelectColumns"/>
         <include refid="UserJoinFrom"/>
-        WHERE u.is_bot = 0
         ORDER BY
             COALESCE(r.elo_score, 1200) DESC,
             (CASE WHEN COALESCE(r.total_games, 0) > 0

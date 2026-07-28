@@ -223,7 +223,19 @@ public class MatchmakingService {
             if (room.hasGuest()) {
                 return AssignRandomBotResult.of(FallbackBotOutcome.HAS_GUEST);
             }
-            Long botId = userMapper.selectRandomMatchBotId();
+            User hostUser = userMapper.selectById(blackUserId);
+            int hostElo = hostUser != null ? hostUser.getEloScore() : 1200;
+            int hostRank = RandomMatchBotStrength.hostRankIndex(hostElo);
+            Long botId = null;
+            for (int span = 0; span <= 11 && botId == null; span++) {
+                int minRank = Math.max(0, hostRank - span);
+                int maxRank = Math.min(11, hostRank + span);
+                int[] band = RandomMatchBotStrength.eloBandForRankSpan(minRank, maxRank);
+                botId = userMapper.selectRandomMatchBotIdInEloRange(band[0], band[1]);
+            }
+            if (botId == null) {
+                botId = userMapper.selectRandomMatchBotId();
+            }
             if (botId == null) {
                 botId = userMapper.selectRandomBotId();
             }
@@ -239,26 +251,11 @@ public class MatchmakingService {
                 }
                 return AssignRandomBotResult.of(FallbackBotOutcome.ROOM_NOT_FOUND);
             }
-            int dmin = 5;
-            int dmax = 8;
             User botUser = userMapper.selectById(botId);
-            if (botUser != null) {
-                dmin = Math.max(1, botUser.getBotSearchDepthMin());
-                dmax = Math.max(1, botUser.getBotSearchDepthMax());
-                if (dmin > dmax) {
-                    int t = dmin;
-                    dmin = dmax;
-                    dmax = t;
-                }
-                dmin = Math.min(12, Math.max(5, dmin + 2));
-                dmax = Math.min(12, Math.max(7, dmax + 2));
-                if (dmin > dmax) {
-                    int t = dmin;
-                    dmin = dmax;
-                    dmax = t;
-                }
-                room.setBotSearchDepthRange(dmin, dmax);
-            }
+            int[] depth = RandomMatchBotStrength.depthRangeForHostRank(hostRank);
+            int dmin = depth[0];
+            int dmax = depth[1];
+            room.setBotSearchDepthRange(dmin, dmax);
             int styleOrd =
                     BotAiStyle.resolveOrdinal(
                             botUser != null ? botUser.getBotAiStyle() : null);
