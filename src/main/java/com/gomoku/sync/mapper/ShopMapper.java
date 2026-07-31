@@ -22,4 +22,6 @@ public interface ShopMapper {
 
     List<ShopCatalogItemDto> selectEnabledCatalogWithCurrentPricesPaged(
             @Param("offset") int offset, @Param("limit") int limit);
+
+    int countEnabledPieceSkinByCode(@Param("itemCode") String itemCode);
 }

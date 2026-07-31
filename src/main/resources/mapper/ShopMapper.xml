@@ -33,6 +33,7 @@
             si.sort_order AS sortOrder,
             si.consumable_kind AS consumableKind,
             si.client_row_id AS clientRowId,
+            si.render_config AS renderConfig,
             (SELECT p.amount FROM shop_item_prices p
              WHERE <include refid="ActivePricePredicate"/>
              ORDER BY p.id DESC LIMIT 1) AS priceAmount,
@@ -67,6 +68,7 @@
             si.sort_order AS sortOrder,
             si.consumable_kind AS consumableKind,
             si.client_row_id AS clientRowId,
+            si.render_config AS renderConfig,
             (SELECT p.amount FROM shop_item_prices p
              WHERE <include refid="ActivePricePredicate"/>
              ORDER BY p.id DESC LIMIT 1) AS priceAmount,
@@ -80,5 +82,13 @@
         WHERE si.enabled = 1
         ORDER BY si.sort_order ASC, si.id ASC
         LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countEnabledPieceSkinByCode" resultType="int">
+        SELECT COUNT(*)
+        FROM shop_items
+        WHERE item_code = #{itemCode}
+          AND shop_category = 'piece_skin'
+          AND enabled = 1
     </select>
 </mapper>

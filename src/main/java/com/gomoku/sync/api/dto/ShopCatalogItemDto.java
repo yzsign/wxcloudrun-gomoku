@@ -1,6 +1,7 @@
 package com.gomoku.sync.api.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonRawValue;
 
 /**
  * GET /api/me/shop/catalog 单行：与 shop_items + 当前有效 shop_item_prices 一致。
@@ -19,6 +20,8 @@ public class ShopCatalogItemDto {
     private Integer priceAmount;
     private String currency;
     private String unitType;
+    /** JSON 字符串：piece_skin 绘制配置 */
+    private String renderConfig;
 
     public String getItemCode() {
         return itemCode;
@@ -98,5 +101,14 @@ public class ShopCatalogItemDto {
 
     public void setUnitType(String unitType) {
         this.unitType = unitType;
+    }
+
+    @JsonRawValue
+    public String getRenderConfig() {
+        return renderConfig;
+    }
+
+    public void setRenderConfig(String renderConfig) {
+        this.renderConfig = renderConfig;
     }
 }

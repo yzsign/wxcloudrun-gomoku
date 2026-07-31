@@ -5,6 +5,7 @@ import com.gomoku.sync.domain.CosmeticCategory;
 import com.gomoku.sync.domain.User;
 import com.gomoku.sync.domain.UserCheckinState;
 import com.gomoku.sync.domain.UserEquippedCosmetic;
+import com.gomoku.sync.mapper.ShopMapper;
 import com.gomoku.sync.mapper.UserCheckinMapper;
 import com.gomoku.sync.mapper.UserEquippedCosmeticMapper;
 import com.gomoku.sync.mapper.UserMapper;
@@ -12,12 +13,8 @@ import com.gomoku.sync.mapper.UserPieceSkinUnlockMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
-
 /**
- * 佩戴棋子皮肤：与客户端目录可选项一致，须已解锁。
+ * 佩戴棋子皮肤：须已解锁；可佩戴 id = basic / tuan_moe / 或 shop 上架的 piece_skin。
  */
 @Service
 public class PieceSkinSelectionService {
@@ -25,34 +22,33 @@ public class PieceSkinSelectionService {
     public static final String SKIN_BASIC = "basic";
     public static final String SKIN_TUAN_MOE = "tuan_moe";
 
-    private static final Set<String> SELECTABLE_SKIN_IDS;
-
-    static {
-        Set<String> s = new HashSet<>();
-        s.add(SKIN_BASIC);
-        s.add(SKIN_TUAN_MOE);
-        s.add(PieceSkinRedeemService.SKIN_QINGTAO_LIBAI);
-        SELECTABLE_SKIN_IDS = Collections.unmodifiableSet(s);
-    }
-
     private final UserMapper userMapper;
     private final UserCheckinMapper userCheckinMapper;
     private final UserPieceSkinUnlockMapper userPieceSkinUnlockMapper;
     private final UserEquippedCosmeticMapper userEquippedCosmeticMapper;
+    private final ShopMapper shopMapper;
 
     public PieceSkinSelectionService(
             UserMapper userMapper,
             UserCheckinMapper userCheckinMapper,
             UserPieceSkinUnlockMapper userPieceSkinUnlockMapper,
-            UserEquippedCosmeticMapper userEquippedCosmeticMapper) {
+            UserEquippedCosmeticMapper userEquippedCosmeticMapper,
+            ShopMapper shopMapper) {
         this.userMapper = userMapper;
         this.userCheckinMapper = userCheckinMapper;
         this.userPieceSkinUnlockMapper = userPieceSkinUnlockMapper;
         this.userEquippedCosmeticMapper = userEquippedCosmeticMapper;
+        this.shopMapper = shopMapper;
     }
 
-    public static boolean isSelectableSkinId(String skinId) {
-        return skinId != null && SELECTABLE_SKIN_IDS.contains(skinId);
+    public boolean isSelectableSkinId(String skinId) {
+        if (skinId == null || skinId.isEmpty()) {
+            return false;
+        }
+        if (SKIN_BASIC.equals(skinId) || SKIN_TUAN_MOE.equals(skinId)) {
+            return true;
+        }
+        return shopMapper.countEnabledPieceSkinByCode(skinId) > 0;
     }
 
     /**
@@ -63,7 +59,13 @@ public class PieceSkinSelectionService {
             return SKIN_BASIC;
         }
         String t = raw.trim();
-        return isSelectableSkinId(t) ? t : SKIN_BASIC;
+        if (SKIN_BASIC.equals(t) || SKIN_TUAN_MOE.equals(t)) {
+            return t;
+        }
+        if (t.length() <= 32 && t.matches("[a-z][a-z0-9_]*")) {
+            return t;
+        }
+        return SKIN_BASIC;
     }
 
     /**
@@ -116,10 +118,7 @@ public class PieceSkinSelectionService {
             UserCheckinState cs = userCheckinMapper.selectByUserId(userId);
             return cs != null && cs.isPieceSkinTuanMoeUnlocked();
         }
-        if (PieceSkinRedeemService.SKIN_QINGTAO_LIBAI.equals(skinId)) {
-            return userPieceSkinUnlockMapper.countByUserIdAndSkinId(userId, skinId) > 0;
-        }
-        return false;
+        return userPieceSkinUnlockMapper.countByUserIdAndSkinId(userId, skinId) > 0;
     }
 
     public enum SelectionError {
